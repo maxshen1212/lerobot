@@ -29,6 +29,7 @@ from tqdm import tqdm
 from lerobot.configs import parser
 from lerobot.configs.train import TrainPipelineConfig
 from lerobot.datasets.factory import make_dataset
+from lerobot.datasets.multi_dataset import MultiLeRobotDataset
 from lerobot.datasets.sampler import EpisodeAwareSampler
 from lerobot.datasets.utils import cycle
 from lerobot.envs.factory import make_env, make_env_pre_post_processors
@@ -258,6 +259,9 @@ def train(cfg: TrainPipelineConfig, accelerator: Accelerator | None = None):
     if (cfg.policy.pretrained_path and not cfg.resume) or not cfg.policy.pretrained_path:
         # Only provide dataset_stats when not resuming from saved processor state
         processor_kwargs["dataset_stats"] = dataset.meta.stats
+        # Multi-dataset co-training: pass per-dataset stats for dataset-aware normalization
+        if isinstance(dataset, MultiLeRobotDataset):
+            processor_kwargs["per_dataset_stats"] = dataset.per_dataset_stats
 
     # For SARM, always provide dataset_meta for progress normalization
     if cfg.policy.type == "sarm":
@@ -343,7 +347,8 @@ def train(cfg: TrainPipelineConfig, accelerator: Accelerator | None = None):
         logging.info(f"{num_total_params=} ({format_big_number(num_total_params)})")
 
     # create dataloader for offline training
-    if hasattr(cfg.policy, "drop_n_last_frames"):
+    is_multi_dataset = isinstance(dataset, MultiLeRobotDataset)
+    if hasattr(cfg.policy, "drop_n_last_frames") and not is_multi_dataset:
         shuffle = False
         sampler = EpisodeAwareSampler(
             dataset.meta.episodes["dataset_from_index"],
@@ -440,7 +445,9 @@ def train(cfg: TrainPipelineConfig, accelerator: Accelerator | None = None):
             if wandb_logger:
                 wandb_log_dict = train_tracker.to_dict()
                 if output_dict:
-                    wandb_log_dict.update(output_dict)
+                    wandb_log_dict.update(
+                        {k: v.item() if isinstance(v, torch.Tensor) else v for k, v in output_dict.items()}
+                    )
                 # Log RA-BC statistics if enabled
                 if rabc_weights is not None:
                     rabc_stats = rabc_weights.get_stats()

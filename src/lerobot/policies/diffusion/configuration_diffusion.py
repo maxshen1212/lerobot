@@ -105,6 +105,13 @@ class DiffusionConfig(PreTrainedConfig):
     horizon: int = 16
     n_action_steps: int = 8
 
+    # Masquerade: language / goal conditioning
+    use_language_feature: bool = False
+    language_embedding_dim: int = 768
+    auxiliary_mlp_hidden_dims: tuple[int, ...] = (128, 128)
+    use_goal_image: bool = False
+    use_proprioception: bool = False
+
     normalization_mapping: dict[str, NormalizationMode] = field(
         default_factory=lambda: {
             "VISUAL": NormalizationMode.MEAN_STD,
@@ -128,6 +135,9 @@ class DiffusionConfig(PreTrainedConfig):
     use_group_norm: bool = True
     spatial_softmax_num_keypoints: int = 32
     use_separate_rgb_encoder_per_camera: bool = False
+    # Masquerade: RGB encoder freezing
+    freeze_rgb_encoders: bool = False
+    finetune_layernorm_rgb_encoders: bool = False
     # Unet.
     down_dims: tuple[int, ...] = (512, 1024, 2048)
     kernel_size: int = 5
@@ -153,6 +163,18 @@ class DiffusionConfig(PreTrainedConfig):
 
     # Loss computation
     do_mask_loss_for_padding: bool = False
+    do_mask_loss_for_2d_action: bool = False
+    data_scale_factor: float = 1.0
+
+    # Masquerade: auxiliary MLP branch for co-training
+    use_auxiliary_mlp: bool = False
+    auxiliary_mlp_output_dim: int = 32
+    auxiliary_loss_weight: float = 1.0
+    no_diffusion_loss: bool = False
+
+    # Masquerade: FiLM conditioning on language embeddings
+    use_film_cond: bool = False
+    film_hidden_dim: int = 512
 
     # Training presets
     optimizer_lr: float = 1e-4
@@ -162,13 +184,26 @@ class DiffusionConfig(PreTrainedConfig):
     scheduler_name: str = "cosine"
     scheduler_warmup_steps: int = 500
 
+    # Masquerade: co-training debug visualization
+    cotrain_debug: bool = False
+    cotrain_debug_freq: int = 1000
+
     def __post_init__(self):
         super().__post_init__()
 
+        if self.use_film_cond:
+            self.normalization_mapping = {
+                "VISUAL": NormalizationMode.MEAN_STD,
+                "STATE": NormalizationMode.MIN_MAX,
+                "ACTION": NormalizationMode.MIN_MAX,
+                "LANGUAGE_EMBEDDING": NormalizationMode.IDENTITY,
+            }
+
         """Input validation (not exhaustive)."""
-        if not self.vision_backbone.startswith("resnet"):
+        supported_backbone_prefixes = ("resnet", "vit", "dinov2")
+        if not any(self.vision_backbone.startswith(p) for p in supported_backbone_prefixes):
             raise ValueError(
-                f"`vision_backbone` must be one of the ResNet variants. Got {self.vision_backbone}."
+                f"`vision_backbone` must be one of the ResNet, ViT, or DINOv2 variants. Got {self.vision_backbone}."
             )
 
         supported_prediction_types = ["epsilon", "sample"]

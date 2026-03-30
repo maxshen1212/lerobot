@@ -22,6 +22,8 @@ from lerobot.policies.diffusion.configuration_diffusion import DiffusionConfig
 from lerobot.processor import (
     AddBatchDimensionProcessorStep,
     DeviceProcessorStep,
+    MultiDatasetNormalizerProcessorStep,
+    MultiDatasetUnnormalizerProcessorStep,
     NormalizerProcessorStep,
     PolicyAction,
     PolicyProcessorPipeline,
@@ -35,6 +37,7 @@ from lerobot.utils.constants import POLICY_POSTPROCESSOR_DEFAULT_NAME, POLICY_PR
 def make_diffusion_pre_post_processors(
     config: DiffusionConfig,
     dataset_stats: dict[str, dict[str, torch.Tensor]] | None = None,
+    per_dataset_stats: list[dict[str, dict[str, torch.Tensor]]] | None = None,
 ) -> tuple[
     PolicyProcessorPipeline[dict[str, Any], dict[str, Any]],
     PolicyProcessorPipeline[PolicyAction, PolicyAction],
@@ -42,40 +45,51 @@ def make_diffusion_pre_post_processors(
     """
     Constructs pre-processor and post-processor pipelines for a diffusion policy.
 
-    The pre-processing pipeline prepares the input data for the model by:
-    1. Renaming features.
-    2. Normalizing the input and output features based on dataset statistics.
-    3. Adding a batch dimension.
-    4. Moving the data to the specified device.
-
-    The post-processing pipeline handles the model's output by:
-    1. Moving the data to the CPU.
-    2. Unnormalizing the output features to their original scale.
+    When ``per_dataset_stats`` is provided (multi-dataset co-training), the pipeline
+    uses dataset-aware normalizers that apply per-sample normalization based on
+    ``dataset_index``.  Otherwise the standard single-dataset normalizer is used.
 
     Args:
-        config: The configuration object for the diffusion policy,
-            containing feature definitions, normalization mappings, and device information.
-        dataset_stats: A dictionary of statistics used for normalization.
-            Defaults to None.
+        config: The configuration object for the diffusion policy.
+        dataset_stats: Single-dataset statistics for normalization.
+        per_dataset_stats: Per-dataset statistics list for multi-dataset co-training.
 
     Returns:
         A tuple containing the configured pre-processor and post-processor pipelines.
     """
+    all_features = {**config.input_features, **config.output_features}
+
+    if per_dataset_stats is not None:
+        normalizer = MultiDatasetNormalizerProcessorStep(
+            features=all_features,
+            norm_map=config.normalization_mapping,
+            per_dataset_stats=per_dataset_stats,
+        )
+        unnormalizer = MultiDatasetUnnormalizerProcessorStep(
+            features=config.output_features,
+            norm_map=config.normalization_mapping,
+            per_dataset_stats=per_dataset_stats,
+        )
+    else:
+        normalizer = NormalizerProcessorStep(
+            features=all_features,
+            norm_map=config.normalization_mapping,
+            stats=dataset_stats,
+        )
+        unnormalizer = UnnormalizerProcessorStep(
+            features=config.output_features,
+            norm_map=config.normalization_mapping,
+            stats=dataset_stats,
+        )
 
     input_steps = [
         RenameObservationsProcessorStep(rename_map={}),
         AddBatchDimensionProcessorStep(),
         DeviceProcessorStep(device=config.device),
-        NormalizerProcessorStep(
-            features={**config.input_features, **config.output_features},
-            norm_map=config.normalization_mapping,
-            stats=dataset_stats,
-        ),
+        normalizer,
     ]
     output_steps = [
-        UnnormalizerProcessorStep(
-            features=config.output_features, norm_map=config.normalization_mapping, stats=dataset_stats
-        ),
+        unnormalizer,
         DeviceProcessorStep(device="cpu"),
     ]
     return (

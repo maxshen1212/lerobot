@@ -532,6 +532,306 @@ class UnnormalizerProcessorStep(_NormalizationMixin, ProcessorStep):
         return features
 
 
+@dataclass
+@ProcessorStepRegistry.register(name="multi_dataset_normalizer_processor")
+class MultiDatasetNormalizerProcessorStep(_NormalizationMixin, ProcessorStep):
+    """Dataset-aware normalizer for co-training with multiple datasets.
+
+    Stores per-dataset stats as a list. At forward time, uses ``dataset_index``
+    from ``complementary_data`` to select the correct stats for each sample,
+    then applies vectorized normalization via advanced indexing.
+
+    If no ``dataset_index`` is present (e.g. during single-sample inference),
+    the first dataset's stats are used as fallback.
+    """
+
+    per_dataset_stats: list[dict[str, dict[str, Any]]] | None = None
+
+    # Stacked tensors: {key: {stat_name: (N, *shape)}}
+    _stacked_stats: dict[str, dict[str, Tensor]] = field(default_factory=dict, init=False, repr=False)
+
+    def __post_init__(self):
+        # Use first dataset's stats as the base single-dataset stats so the
+        # parent mixin has something to work with.
+        if self.per_dataset_stats and not self.stats:
+            self.stats = self.per_dataset_stats[0]
+        super().__post_init__()
+        self._build_stacked_stats()
+
+    def _build_stacked_stats(self):
+        """Pre-stack per-dataset stats into (N, *shape) tensors for indexing."""
+        self._stacked_stats = {}
+        if not self.per_dataset_stats:
+            return
+        all_keys: set[str] = set()
+        for ds_stats in self.per_dataset_stats:
+            all_keys.update(ds_stats.keys())
+        for key in all_keys:
+            stat_names: set[str] = set()
+            for ds_stats in self.per_dataset_stats:
+                if key in ds_stats:
+                    stat_names.update(ds_stats[key].keys())
+            self._stacked_stats[key] = {}
+            for sn in stat_names:
+                tensors = []
+                for ds_stats in self.per_dataset_stats:
+                    val = ds_stats.get(key, {}).get(sn)
+                    if val is None:
+                        tensors.append(torch.zeros(1))
+                    elif isinstance(val, Tensor):
+                        tensors.append(val.cpu().float())
+                    else:
+                        tensors.append(torch.as_tensor(val, dtype=torch.float32))
+                self._stacked_stats[key][sn] = torch.stack(tensors, dim=0)
+
+    def to(self, device=None, dtype=None) -> MultiDatasetNormalizerProcessorStep:
+        super().to(device=device, dtype=dtype)
+        for key_stats in self._stacked_stats.values():
+            for sn, t in key_stats.items():
+                key_stats[sn] = t.to(device=self.device or "cpu", dtype=self.dtype or torch.float32)
+        return self
+
+    def _get_dataset_index(self, transition: EnvTransition) -> Tensor | None:
+        comp = transition.get(TransitionKey.COMPLEMENTARY_DATA)
+        if comp and "dataset_index" in comp:
+            idx = comp["dataset_index"]
+            return idx.long() if isinstance(idx, Tensor) else torch.tensor(idx, dtype=torch.long)
+        return None
+
+    def _multi_apply(self, tensor: Tensor, key: str, feature_type, ds_idx: Tensor | None, inverse: bool) -> Tensor:
+        """Apply per-dataset normalization using advanced indexing."""
+        norm_mode = self.norm_map.get(feature_type, NormalizationMode.IDENTITY)
+        if norm_mode == NormalizationMode.IDENTITY or key not in self._stacked_stats:
+            return tensor
+        if ds_idx is None:
+            return self._apply_transform(tensor, key, feature_type, inverse=inverse)
+
+        stacked = self._stacked_stats[key]
+        dev, dt = tensor.device, tensor.dtype
+        # Move stacked stats to correct device on first use
+        for sn, t in stacked.items():
+            if t.device != dev or t.dtype != dt:
+                stacked[sn] = t.to(device=dev, dtype=dt)
+
+        idx = ds_idx.to(dev)
+        # Expand idx for broadcasting: (B,) -> (B, 1, ...) to match tensor dims
+        idx_expanded = idx.reshape(-1, *([1] * (tensor.ndim - 1)))
+
+        if norm_mode == NormalizationMode.MEAN_STD:
+            mean = stacked["mean"][idx].reshape_as(tensor) if "mean" in stacked else torch.zeros_like(tensor)
+            std = stacked["std"][idx].reshape_as(tensor) if "std" in stacked else torch.ones_like(tensor)
+            denom = std + self.eps
+            return tensor * std + mean if inverse else (tensor - mean) / denom
+
+        if norm_mode == NormalizationMode.MIN_MAX:
+            mn = stacked["min"][idx].reshape_as(tensor) if "min" in stacked else torch.zeros_like(tensor)
+            mx = stacked["max"][idx].reshape_as(tensor) if "max" in stacked else torch.ones_like(tensor)
+            denom = mx - mn
+            denom = torch.where(denom == 0, torch.tensor(self.eps, device=dev, dtype=dt), denom)
+            if inverse:
+                return (tensor + 1) / 2 * denom + mn
+            return 2 * (tensor - mn) / denom - 1
+
+        return self._apply_transform(tensor, key, feature_type, inverse=inverse)
+
+    def __call__(self, transition: EnvTransition) -> EnvTransition:
+        new_transition = transition.copy()
+        ds_idx = self._get_dataset_index(new_transition)
+
+        observation = new_transition.get(TransitionKey.OBSERVATION)
+        if observation is not None:
+            new_obs = dict(observation)
+            for key, feature in self.features.items():
+                if feature.type != FeatureType.ACTION and key in new_obs:
+                    new_obs[key] = self._multi_apply(
+                        torch.as_tensor(new_obs[key]), key, feature.type, ds_idx, inverse=False
+                    )
+            new_transition[TransitionKey.OBSERVATION] = new_obs
+
+        action = new_transition.get(TransitionKey.ACTION)
+        if action is not None:
+            if not isinstance(action, PolicyAction):
+                raise ValueError(f"Action should be a PolicyAction type got {type(action)}")
+            new_transition[TransitionKey.ACTION] = self._multi_apply(
+                action, ACTION, FeatureType.ACTION, ds_idx, inverse=False
+            )
+        return new_transition
+
+    def transform_features(self, features):
+        return features
+
+    def state_dict(self) -> dict[str, Tensor]:
+        flat: dict[str, Tensor] = {}
+        if not self.per_dataset_stats:
+            return super().state_dict()
+        for i, ds_stats in enumerate(self.per_dataset_stats):
+            ts = to_tensor(ds_stats, device="cpu", dtype=torch.float32)
+            for key, sub in ts.items():
+                for stat_name, tensor in sub.items():
+                    flat[f"ds{i}.{key}.{stat_name}"] = tensor
+        return flat
+
+    def load_state_dict(self, state: dict[str, Tensor]) -> None:
+        if self._stats_explicitly_provided:
+            self._build_stacked_stats()
+            return
+        ds_map: dict[int, dict[str, dict[str, Tensor]]] = {}
+        for flat_key, tensor in state.items():
+            parts = flat_key.split(".", 2)
+            if parts[0].startswith("ds"):
+                ds_i = int(parts[0][2:])
+                rest_key, stat_name = parts[1] + ("." + parts[2] if len(parts) > 2 else ""), ""
+                rest_key, stat_name = flat_key[len(parts[0]) + 1:].rsplit(".", 1)
+                ds_map.setdefault(ds_i, {}).setdefault(rest_key, {})[stat_name] = tensor
+        if ds_map:
+            self.per_dataset_stats = [ds_map[i] for i in sorted(ds_map.keys())]
+            self.stats = self.per_dataset_stats[0] if self.per_dataset_stats else {}
+            self._tensor_stats = to_tensor(self.stats, device=self.device, dtype=self.dtype)
+            self._build_stacked_stats()
+        else:
+            super().load_state_dict(state)
+
+
+@dataclass
+@ProcessorStepRegistry.register(name="multi_dataset_unnormalizer_processor")
+class MultiDatasetUnnormalizerProcessorStep(_NormalizationMixin, ProcessorStep):
+    """Dataset-aware unnormalizer (inverse of MultiDatasetNormalizerProcessorStep)."""
+
+    per_dataset_stats: list[dict[str, dict[str, Any]]] | None = None
+    _stacked_stats: dict[str, dict[str, Tensor]] = field(default_factory=dict, init=False, repr=False)
+
+    def __post_init__(self):
+        if self.per_dataset_stats and not self.stats:
+            self.stats = self.per_dataset_stats[0]
+        super().__post_init__()
+        self._build_stacked_stats()
+
+    def _build_stacked_stats(self):
+        self._stacked_stats = {}
+        if not self.per_dataset_stats:
+            return
+        all_keys: set[str] = set()
+        for ds_stats in self.per_dataset_stats:
+            all_keys.update(ds_stats.keys())
+        for key in all_keys:
+            stat_names: set[str] = set()
+            for ds_stats in self.per_dataset_stats:
+                if key in ds_stats:
+                    stat_names.update(ds_stats[key].keys())
+            self._stacked_stats[key] = {}
+            for sn in stat_names:
+                tensors = []
+                for ds_stats in self.per_dataset_stats:
+                    val = ds_stats.get(key, {}).get(sn)
+                    if val is None:
+                        tensors.append(torch.zeros(1))
+                    elif isinstance(val, Tensor):
+                        tensors.append(val.cpu().float())
+                    else:
+                        tensors.append(torch.as_tensor(val, dtype=torch.float32))
+                self._stacked_stats[key][sn] = torch.stack(tensors, dim=0)
+
+    def to(self, device=None, dtype=None) -> MultiDatasetUnnormalizerProcessorStep:
+        super().to(device=device, dtype=dtype)
+        for key_stats in self._stacked_stats.values():
+            for sn, t in key_stats.items():
+                key_stats[sn] = t.to(device=self.device or "cpu", dtype=self.dtype or torch.float32)
+        return self
+
+    def _get_dataset_index(self, transition: EnvTransition) -> Tensor | None:
+        comp = transition.get(TransitionKey.COMPLEMENTARY_DATA)
+        if comp and "dataset_index" in comp:
+            idx = comp["dataset_index"]
+            return idx.long() if isinstance(idx, Tensor) else torch.tensor(idx, dtype=torch.long)
+        return None
+
+    def _multi_apply(self, tensor: Tensor, key: str, feature_type, ds_idx: Tensor | None, inverse: bool) -> Tensor:
+        norm_mode = self.norm_map.get(feature_type, NormalizationMode.IDENTITY)
+        if norm_mode == NormalizationMode.IDENTITY or key not in self._stacked_stats:
+            return tensor
+        if ds_idx is None:
+            return self._apply_transform(tensor, key, feature_type, inverse=inverse)
+        stacked = self._stacked_stats[key]
+        dev, dt = tensor.device, tensor.dtype
+        for sn, t in stacked.items():
+            if t.device != dev or t.dtype != dt:
+                stacked[sn] = t.to(device=dev, dtype=dt)
+        idx = ds_idx.to(dev)
+
+        if norm_mode == NormalizationMode.MEAN_STD:
+            mean = stacked["mean"][idx].reshape_as(tensor) if "mean" in stacked else torch.zeros_like(tensor)
+            std = stacked["std"][idx].reshape_as(tensor) if "std" in stacked else torch.ones_like(tensor)
+            denom = std + self.eps
+            return tensor * std + mean if inverse else (tensor - mean) / denom
+
+        if norm_mode == NormalizationMode.MIN_MAX:
+            mn = stacked["min"][idx].reshape_as(tensor) if "min" in stacked else torch.zeros_like(tensor)
+            mx = stacked["max"][idx].reshape_as(tensor) if "max" in stacked else torch.ones_like(tensor)
+            denom = mx - mn
+            denom = torch.where(denom == 0, torch.tensor(self.eps, device=dev, dtype=dt), denom)
+            if inverse:
+                return (tensor + 1) / 2 * denom + mn
+            return 2 * (tensor - mn) / denom - 1
+
+        return self._apply_transform(tensor, key, feature_type, inverse=inverse)
+
+    def __call__(self, transition: EnvTransition) -> EnvTransition:
+        new_transition = transition.copy()
+        ds_idx = self._get_dataset_index(new_transition)
+
+        observation = new_transition.get(TransitionKey.OBSERVATION)
+        if observation is not None:
+            new_obs = dict(observation)
+            for key, feature in self.features.items():
+                if feature.type != FeatureType.ACTION and key in new_obs:
+                    new_obs[key] = self._multi_apply(
+                        torch.as_tensor(new_obs[key]), key, feature.type, ds_idx, inverse=True
+                    )
+            new_transition[TransitionKey.OBSERVATION] = new_obs
+
+        action = new_transition.get(TransitionKey.ACTION)
+        if action is not None:
+            if not isinstance(action, PolicyAction):
+                raise ValueError(f"Action should be a PolicyAction type got {type(action)}")
+            new_transition[TransitionKey.ACTION] = self._multi_apply(
+                action, ACTION, FeatureType.ACTION, ds_idx, inverse=True
+            )
+        return new_transition
+
+    def transform_features(self, features):
+        return features
+
+    def state_dict(self) -> dict[str, Tensor]:
+        flat: dict[str, Tensor] = {}
+        if not self.per_dataset_stats:
+            return super().state_dict()
+        for i, ds_stats in enumerate(self.per_dataset_stats):
+            ts = to_tensor(ds_stats, device="cpu", dtype=torch.float32)
+            for key, sub in ts.items():
+                for stat_name, tensor in sub.items():
+                    flat[f"ds{i}.{key}.{stat_name}"] = tensor
+        return flat
+
+    def load_state_dict(self, state: dict[str, Tensor]) -> None:
+        if self._stats_explicitly_provided:
+            self._build_stacked_stats()
+            return
+        ds_map: dict[int, dict[str, dict[str, Tensor]]] = {}
+        for flat_key, tensor in state.items():
+            parts = flat_key.split(".", 2)
+            if parts[0].startswith("ds"):
+                rest_key, stat_name = flat_key[len(parts[0]) + 1:].rsplit(".", 1)
+                ds_i = int(parts[0][2:])
+                ds_map.setdefault(ds_i, {}).setdefault(rest_key, {})[stat_name] = tensor
+        if ds_map:
+            self.per_dataset_stats = [ds_map[i] for i in sorted(ds_map.keys())]
+            self.stats = self.per_dataset_stats[0] if self.per_dataset_stats else {}
+            self._tensor_stats = to_tensor(self.stats, device=self.device, dtype=self.dtype)
+            self._build_stacked_stats()
+        else:
+            super().load_state_dict(state)
+
+
 def hotswap_stats(
     policy_processor: PolicyProcessorPipeline, stats: dict[str, dict[str, Any]]
 ) -> PolicyProcessorPipeline:

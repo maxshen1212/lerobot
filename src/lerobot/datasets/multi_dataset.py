@@ -91,10 +91,21 @@ class MultiLeRobotDataset(torch.utils.data.Dataset):
 
         self.image_transforms = image_transforms
         self.delta_timestamps = delta_timestamps
-        # TODO(rcadene, aliberts): We should not perform this aggregation for datasets
-        # with multiple robots of different ranges. Instead we should have one normalization
-        # per robot.
+        # Aggregated stats (used by the base pipeline when no per-dataset normalizer is active)
         self.stats = aggregate_stats([dataset.meta.stats for dataset in self._datasets])
+        # Per-dataset stats for MultiDatasetNormalizerProcessorStep
+        self.per_dataset_stats = [dataset.meta.stats for dataset in self._datasets]
+
+    @property
+    def meta(self):
+        """Expose a meta-like object compatible with single-dataset code paths.
+
+        Uses the first sub-dataset's metadata as the base, with aggregated stats
+        so that features, camera_keys, etc. are available.
+        """
+        meta = self._datasets[0].meta
+        meta.stats = self.stats
+        return meta
 
     @property
     def repo_id_to_index(self):

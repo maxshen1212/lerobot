@@ -171,8 +171,13 @@ def _extract_complementary_data(batch: dict[str, Any]) -> dict[str, Any]:
     index_key = {"index": batch["index"]} if "index" in batch else {}
     task_index_key = {"task_index": batch["task_index"]} if "task_index" in batch else {}
     episode_index_key = {"episode_index": batch["episode_index"]} if "episode_index" in batch else {}
+    dataset_index_key = {"dataset_index": batch["dataset_index"]} if "dataset_index" in batch else {}
+    out_of_frame_keys = {k: v for k, v in batch.items() if "is_out_of_frame" in k}
 
-    return {**pad_keys, **task_key, **subtask_key, **index_key, **task_index_key, **episode_index_key}
+    return {
+        **pad_keys, **task_key, **subtask_key, **index_key,
+        **task_index_key, **episode_index_key, **dataset_index_key, **out_of_frame_keys,
+    }
 
 
 def create_transition(

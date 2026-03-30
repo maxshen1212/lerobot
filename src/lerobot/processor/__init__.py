@@ -51,7 +51,13 @@ from .hil_processor import (
     RewardClassifierProcessorStep,
     TimeLimitProcessorStep,
 )
-from .normalize_processor import NormalizerProcessorStep, UnnormalizerProcessorStep, hotswap_stats
+from .normalize_processor import (
+    MultiDatasetNormalizerProcessorStep,
+    MultiDatasetUnnormalizerProcessorStep,
+    NormalizerProcessorStep,
+    UnnormalizerProcessorStep,
+    hotswap_stats,
+)
 from .observation_processor import VanillaObservationProcessorStep
 from .pipeline import (
     ActionProcessorStep,
@@ -102,6 +108,8 @@ __all__ = [
     "make_default_robot_observation_processor",
     "MapDeltaActionToRobotActionStep",
     "MapTensorToDeltaActionDictStep",
+    "MultiDatasetNormalizerProcessorStep",
+    "MultiDatasetUnnormalizerProcessorStep",
     "NormalizerProcessorStep",
     "Numpy2TorchActionProcessorStep",
     "ObservationProcessorStep",

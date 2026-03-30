@@ -215,6 +215,7 @@ class ProcessorConfigKwargs(TypedDict, total=False):
     preprocessor_overrides: dict[str, Any] | None
     postprocessor_overrides: dict[str, Any] | None
     dataset_stats: dict[str, dict[str, torch.Tensor]] | None
+    per_dataset_stats: list[dict[str, dict[str, torch.Tensor]]] | None
 
 
 def make_pre_post_processors(
@@ -305,6 +306,7 @@ def make_pre_post_processors(
         processors = make_diffusion_pre_post_processors(
             config=policy_cfg,
             dataset_stats=kwargs.get("dataset_stats"),
+            per_dataset_stats=kwargs.get("per_dataset_stats"),
         )
 
     elif isinstance(policy_cfg, ACTConfig):
