@@ -21,8 +21,11 @@ watch -n 1 nvidia-smi
 export CUDA_VISIBLE_DEVICES=x
 echo $CUDA_VISIBLE_DEVICES
 
+# lerobot training
 cd lerobot
 wandb login
+hf auth login
+# lerobot overfitting test
 python src/lerobot/scripts/lerobot_train.py \
     --dataset.repo_id tri/lbm_sim_ego \
     --dataset.root /data/maxshen/lerobot_output \
@@ -38,13 +41,13 @@ python src/lerobot/scripts/lerobot_train.py \
     --wandb.project "SLURM_Lerobot" \
     --policy.push_to_hub false
 
-huggingface-cli login
+# lerobot training (original diffusion policy)
 python src/lerobot/scripts/lerobot_train.py \
     --dataset.repo_id tri/lbm_sim_ego_full \
     --dataset.root /data/maxshen/lerobot_output_full \
     --policy.type diffusion \
-    --batch_size 32 \
-    --steps 100000 \
+    --batch_size 64 \
+    --steps 150000 \
     --log_freq 100 \
     --save_checkpoint true \
     --save_freq 10000 \
@@ -52,7 +55,7 @@ python src/lerobot/scripts/lerobot_train.py \
     --wandb.enable true \
     --wandb.entity "chihhans-usc" \
     --wandb.project "SLURM_Lerobot" \
-    --policy.repo_id="chihhans/tri-diffusion-BimanualPlaceAppleFromBowlOnCuttingBoard"
+    --policy.repo_id="CHIH-HAN/tri-diffusion-BimanualPlaceAppleFromBowlOnCuttingBoard"
 
 # Author's training script example
 python lerobot/scripts/train.py \
