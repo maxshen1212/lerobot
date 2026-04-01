@@ -22,10 +22,12 @@ export CUDA_VISIBLE_DEVICES=x
 echo $CUDA_VISIBLE_DEVICES
 
 # lerobot training
-cd lerobot
+conda activate lerobot
+cd data/maxshen/lerobot
 wandb login
 hf auth login
-# lerobot overfitting test
+
+# overfit on one episode
 python src/lerobot/scripts/lerobot_train.py \
     --dataset.repo_id tri/lbm_sim_ego \
     --dataset.root /data/maxshen/lerobot_output \
@@ -41,7 +43,7 @@ python src/lerobot/scripts/lerobot_train.py \
     --wandb.project "SLURM_Lerobot" \
     --policy.push_to_hub false
 
-# lerobot training (original diffusion policy)
+# train on one task (all episodes)
 python src/lerobot/scripts/lerobot_train.py \
     --dataset.repo_id tri/lbm_sim_ego_full \
     --dataset.root /data/maxshen/lerobot_output_full \
