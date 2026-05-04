@@ -227,6 +227,31 @@ def train(cfg: TrainPipelineConfig, accelerator: Accelerator | None = None):
     if not is_main_process:
         dataset = make_dataset(cfg)
 
+    # --- Validation dataloader ---
+    val_dataloader = None
+    if cfg.val_freq > 0 and cfg.val_root is not None:
+        from copy import deepcopy
+        _val_cfg = deepcopy(cfg)
+        _val_cfg.dataset.root = cfg.val_root
+        _val_cfg.dataset.image_transforms.enable = False
+        _val_dataset = make_dataset(_val_cfg)
+        _val_sampler = torch.utils.data.distributed.DistributedSampler(
+            _val_dataset, shuffle=False, drop_last=False
+        )
+        val_dataloader = torch.utils.data.DataLoader(
+            _val_dataset,
+            num_workers=cfg.num_workers,
+            batch_size=cfg.batch_size,
+            sampler=_val_sampler,
+            pin_memory=device.type == "cuda",
+            drop_last=False,
+        )
+        val_dataloader = accelerator.prepare(val_dataloader)
+        if is_main_process:
+            logging.info(
+                f"Val dataset: {_val_dataset.num_episodes} episodes, {_val_dataset.num_frames} frames"
+            )
+
     # Create environment used for evaluating checkpoints during training on simulation data.
     # On real-world data, no need to create an environment as evaluations are done outside train.py,
     # using the eval.py instead, with gym_dora environment and dora-rs.
@@ -446,6 +471,11 @@ def train(cfg: TrainPipelineConfig, accelerator: Accelerator | None = None):
         is_log_step = cfg.log_freq > 0 and step % cfg.log_freq == 0 and is_main_process
         is_saving_step = step % cfg.save_freq == 0 or step == cfg.steps
         is_eval_step = cfg.eval_freq > 0 and step % cfg.eval_freq == 0
+        is_val_step = (
+            cfg.val_freq > 0
+            and val_dataloader is not None
+            and step % cfg.val_freq == 0
+        )
 
         if is_log_step:
             logging.info(train_tracker)
@@ -533,6 +563,27 @@ def train(cfg: TrainPipelineConfig, accelerator: Accelerator | None = None):
                     wandb_logger.log_dict(wandb_log_dict, step, mode="eval")
                     wandb_logger.log_video(eval_info["overall"]["video_paths"][0], step, mode="eval")
 
+            accelerator.wait_for_everyone()
+
+        if is_val_step:
+            torch.cuda.empty_cache()
+            policy.eval()
+            val_loss_total = torch.tensor(0.0, device=device)
+            val_n = torch.tensor(0, device=device)
+            with torch.no_grad(), accelerator.autocast():
+                for val_batch in val_dataloader:
+                    val_batch = preprocessor(val_batch)
+                    val_loss, _ = accelerator.unwrap_model(policy).forward(val_batch)
+                    val_loss_total += val_loss.detach()
+                    val_n += 1
+            val_loss_total = accelerator.reduce(val_loss_total, reduction="sum")
+            val_n = accelerator.reduce(val_n, reduction="sum")
+            policy.train()
+            if is_main_process and val_n.item() > 0:
+                val_loss_avg = (val_loss_total / val_n).item()
+                logging.info(f"step:{step} val/loss:{val_loss_avg:.4f}")
+                if wandb_logger:
+                    wandb_logger.log_dict({"loss": val_loss_avg}, step, mode="val")
             accelerator.wait_for_everyone()
 
     if is_main_process:

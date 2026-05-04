@@ -513,11 +513,11 @@ class TransformerBlock(nn.Module):
                 hidden_size, num_heads=num_heads, batch_first=True, dropout=dropout
             )
 
-        # self.norm1 = nn.LayerNorm(hidden_size, elementwise_affine=False, eps=1e-6)
-        # self.norm2 = nn.LayerNorm(hidden_size, elementwise_affine=False, eps=1e-6)
+        self.norm1 = nn.LayerNorm(hidden_size, elementwise_affine=False, eps=1e-6)
+        self.norm2 = nn.LayerNorm(hidden_size, elementwise_affine=False, eps=1e-6)
         # TODO: TRI-style RMSNorm (replace LayerNorm above)
-        self.norm1 = nn.RMSNorm(hidden_size, elementwise_affine=False, eps=1e-6)
-        self.norm2 = nn.RMSNorm(hidden_size, elementwise_affine=False, eps=1e-6)
+        # self.norm1 = nn.RMSNorm(hidden_size, elementwise_affine=False, eps=1e-6)
+        # self.norm2 = nn.RMSNorm(hidden_size, elementwise_affine=False, eps=1e-6)
 
         self.mlp = nn.Sequential(
             nn.Linear(hidden_size, hidden_size * 4),
@@ -565,30 +565,30 @@ class DiffusionTransformer(nn.Module):
         self.use_rope = config.use_rope
 
         self.timestep_embed_dim = config.timestep_embed_dim
-        # self.time_mlp = nn.Sequential(
-        #     SinusoidalPosEmb(self.timestep_embed_dim),
-        #     nn.Linear(self.timestep_embed_dim, 2 * self.timestep_embed_dim),
-        #     nn.GELU(),
-        #     nn.Linear(2 * self.timestep_embed_dim, self.timestep_embed_dim),
-        #     nn.GELU(),
-        # )
-        # TODO: TRI-style time MLP: 2-layer MLP + 4x expansion + Mish
         self.time_mlp = nn.Sequential(
             SinusoidalPosEmb(self.timestep_embed_dim),
-            nn.Linear(self.timestep_embed_dim, 4 * self.timestep_embed_dim),
-            nn.Mish(),
-            nn.Linear(4 * self.timestep_embed_dim, self.timestep_embed_dim),
+            nn.Linear(self.timestep_embed_dim, 2 * self.timestep_embed_dim),
+            nn.GELU(),
+            nn.Linear(2 * self.timestep_embed_dim, self.timestep_embed_dim),
+            nn.GELU(),
         )
+        # TODO: TRI-style time MLP: 2-layer MLP + 4x expansion + Mish
+        # self.time_mlp = nn.Sequential(
+        #     SinusoidalPosEmb(self.timestep_embed_dim),
+        #     nn.Linear(self.timestep_embed_dim, 4 * self.timestep_embed_dim),
+        #     nn.Mish(),
+        #     nn.Linear(4 * self.timestep_embed_dim, self.timestep_embed_dim),
+        # )
 
 
         self.cond_dim = self.timestep_embed_dim + conditioning_dim
-        # self.input_proj = nn.Linear(self.action_dim, self.hidden_size)
+        self.input_proj = nn.Linear(self.action_dim, self.hidden_size)
         # TODO: TRI-style action encoder: 2-layer MLP + 4x expansion + Mish
-        self.input_proj = nn.Sequential(
-            nn.Linear(self.action_dim, 4 * self.hidden_size),
-            nn.Mish(),
-            nn.Linear(4 * self.hidden_size, self.hidden_size),
-        )
+        # self.input_proj = nn.Sequential(
+        #     nn.Linear(self.action_dim, 4 * self.hidden_size),
+        #     nn.Mish(),
+        #     nn.Linear(4 * self.hidden_size, self.hidden_size),
+        # )
 
         if config.use_positional_encoding:
             self.pos_embedding = nn.Parameter(
@@ -612,49 +612,49 @@ class DiffusionTransformer(nn.Module):
             ]
         )
 
-        # self.output_proj = nn.Linear(self.hidden_size, self.action_dim)
+        self.output_proj = nn.Linear(self.hidden_size, self.action_dim)
         # TODO: TRI-style action decoder: 2-layer MLP with 4× hidden expansion + Mish
-        self.output_proj = nn.Sequential(
-            nn.Linear(self.hidden_size, 4 * self.hidden_size),
-            nn.Mish(),
-            nn.Linear(4 * self.hidden_size, self.action_dim),
-        )
+        # self.output_proj = nn.Sequential(
+        #     nn.Linear(self.hidden_size, 4 * self.hidden_size),
+        #     nn.Mish(),
+        #     nn.Linear(4 * self.hidden_size, self.action_dim),
+        # )
 
         # TODO: TRI-style final AdaLN before decoding (conditioning = timestep + observation)
-        self.final_norm = nn.RMSNorm(self.hidden_size, elementwise_affine=False, eps=1e-6)
-        self.final_adaLN_modulation = nn.Sequential(
-            nn.SiLU(), nn.Linear(self.cond_dim, 2 * self.hidden_size, bias=True)
-        )
+        # self.final_norm = nn.RMSNorm(self.hidden_size, elementwise_affine=False, eps=1e-6)
+        # self.final_adaLN_modulation = nn.Sequential(
+        #     nn.SiLU(), nn.Linear(self.cond_dim, 2 * self.hidden_size, bias=True)
+        # )
 
         self._initialize_weights()
 
     def _initialize_weights(self):
         # TODO: TRI-style xavier uniform init for all linear layers (run first as broad sweep)
-        for m in self.modules():
-            if isinstance(m, nn.Linear):
-                nn.init.xavier_uniform_(m.weight)
-                if m.bias is not None:
-                    nn.init.zeros_(m.bias)
+        # for m in self.modules():
+        #     if isinstance(m, nn.Linear):
+        #         nn.init.xavier_uniform_(m.weight)
+        #         if m.bias is not None:
+        #             nn.init.zeros_(m.bias)
 
         # TODO: TRI-style normal(std=0.02) init for timestep MLP (overrides xavier above)
-        for m in self.time_mlp.modules():
-            if isinstance(m, nn.Linear):
-                nn.init.normal_(m.weight, mean=0.0, std=0.02)
-                if m.bias is not None:
-                    nn.init.zeros_(m.bias)
+        # for m in self.time_mlp.modules():
+        #     if isinstance(m, nn.Linear):
+        #         nn.init.normal_(m.weight, mean=0.0, std=0.02)
+        #         if m.bias is not None:
+        #             nn.init.zeros_(m.bias)
 
         # AdaLN modulation zero-init (overrides xavier above)
         for block in self.transformer_blocks:
             nn.init.constant_(block.adaLN_modulation[-1].weight, 0)
             nn.init.constant_(block.adaLN_modulation[-1].bias, 0)
 
-        # Zero-init final AdaLN modulation and only the last linear of output_proj.
-        # Zeroing all layers of output_proj would kill gradients through the intermediate layer.
-        nn.init.constant_(self.final_adaLN_modulation[-1].weight, 0)
-        nn.init.constant_(self.final_adaLN_modulation[-1].bias, 0)
-        last_output_linear = [m for m in self.output_proj.modules() if isinstance(m, nn.Linear)][-1]
-        nn.init.constant_(last_output_linear.weight, 0)
-        nn.init.constant_(last_output_linear.bias, 0)
+        # TODO: TRI-style zero-init for final AdaLN modulation and output_proj
+        # nn.init.constant_(self.final_adaLN_modulation[-1].weight, 0)
+        # nn.init.constant_(self.final_adaLN_modulation[-1].bias, 0)
+        # for m in self.output_proj.modules():
+        #     if isinstance(m, nn.Linear):
+        #         nn.init.constant_(m.weight, 0)
+        #         nn.init.constant_(m.bias, 0)
 
     def forward(self, x: Tensor, timestep: Tensor, conditioning_vec: Tensor) -> Tensor:
         _, seq_len, _ = x.shape
@@ -670,8 +670,9 @@ class DiffusionTransformer(nn.Module):
         for block in self.transformer_blocks:
             hidden_seq = block(hidden_seq, cond_features)
 
-        shift, scale = self.final_adaLN_modulation(cond_features).chunk(2, dim=-1)
-        hidden_seq = modulate(self.final_norm(hidden_seq), shift.unsqueeze(1), scale.unsqueeze(1))
+        # TODO: TRI-style: AdaLN modulation before decoding, then 2-layer MLP decoder
+        # shift, scale = self.final_adaLN_modulation(cond_features).chunk(2, dim=-1)
+        # hidden_seq = modulate(self.final_norm(hidden_seq), shift, scale)
         return self.output_proj(hidden_seq)
 
 
