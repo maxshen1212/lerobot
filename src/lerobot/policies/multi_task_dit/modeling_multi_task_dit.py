@@ -516,8 +516,8 @@ class TransformerBlock(nn.Module):
         # self.norm1 = nn.LayerNorm(hidden_size, elementwise_affine=False, eps=1e-6)
         # self.norm2 = nn.LayerNorm(hidden_size, elementwise_affine=False, eps=1e-6)
         # TODO: TRI-style RMSNorm (replace LayerNorm above)
-        self.norm1 = nn.RMSNorm(hidden_size, elementwise_affine=False, eps=1e-6)
-        self.norm2 = nn.RMSNorm(hidden_size, elementwise_affine=False, eps=1e-6)
+        self.norm1 = nn.RMSNorm(hidden_size, elementwise_affine=True, eps=1e-6)
+        self.norm2 = nn.RMSNorm(hidden_size, elementwise_affine=True, eps=1e-6)
 
         self.mlp = nn.Sequential(
             nn.Linear(hidden_size, hidden_size * 4),
@@ -621,7 +621,7 @@ class DiffusionTransformer(nn.Module):
         )
 
         # TODO: TRI-style final AdaLN before decoding (conditioning = timestep + observation)
-        self.final_norm = nn.RMSNorm(self.hidden_size, elementwise_affine=False, eps=1e-6)
+        self.final_norm = nn.RMSNorm(self.hidden_size, elementwise_affine=True, eps=1e-6)
         self.final_adaLN_modulation = nn.Sequential(
             nn.SiLU(), nn.Linear(self.cond_dim, 2 * self.hidden_size, bias=True)
         )
@@ -712,7 +712,11 @@ class DiffusionObjective(nn.Module):
         )
 
     def compute_loss(self, model: nn.Module, batch: dict[str, Tensor], conditioning_vec: Tensor) -> Tensor:
-        clean_actions = batch[ACTION]
+        # Repeat each observation N times with different noise/timestep samples (TRI: N=8).
+        # Images are encoded once upstream; only actions and conditioning_vec are repeated.
+        N = self.config.train_diffusion_n_samples
+        clean_actions = batch[ACTION].repeat_interleave(N, dim=0)
+        conditioning_vec = conditioning_vec.repeat_interleave(N, dim=0)
         noise = torch.randn_like(clean_actions)
         timesteps = torch.randint(
             low=0,
@@ -734,7 +738,7 @@ class DiffusionObjective(nn.Module):
         loss = F.mse_loss(predicted, target, reduction="none")
 
         if self.do_mask_loss_for_padding and "action_is_pad" in batch:
-            valid_actions = ~batch["action_is_pad"]
+            valid_actions = ~batch["action_is_pad"].repeat_interleave(N, dim=0)
             loss = loss * valid_actions.unsqueeze(-1)
 
         return loss.mean()

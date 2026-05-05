@@ -235,14 +235,11 @@ def train(cfg: TrainPipelineConfig, accelerator: Accelerator | None = None):
         _val_cfg.dataset.root = cfg.val_root
         _val_cfg.dataset.image_transforms.enable = False
         _val_dataset = make_dataset(_val_cfg)
-        _val_sampler = torch.utils.data.distributed.DistributedSampler(
-            _val_dataset, shuffle=False, drop_last=False
-        )
         val_dataloader = torch.utils.data.DataLoader(
             _val_dataset,
             num_workers=cfg.num_workers,
             batch_size=cfg.batch_size,
-            sampler=_val_sampler,
+            shuffle=False,
             pin_memory=device.type == "cuda",
             drop_last=False,
         )

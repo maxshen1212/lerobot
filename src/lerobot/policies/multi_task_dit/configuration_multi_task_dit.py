@@ -102,6 +102,9 @@ class MultiTaskDiTConfig(PreTrainedConfig):
     scheduler_name: str = "cosine"
     scheduler_warmup_steps: int = 0
     do_mask_loss_for_padding: bool = False
+    # Each observation is paired with N independently sampled noise/timestep pairs per step.
+    # Increases effective diffusion batch (batch_size × N) without re-encoding images.
+    train_diffusion_n_samples: int = 1
 
     # Auto-calculated
     drop_n_last_frames: int | None = None
