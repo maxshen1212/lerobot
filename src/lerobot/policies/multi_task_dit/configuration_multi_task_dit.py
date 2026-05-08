@@ -88,7 +88,7 @@ class MultiTaskDiTConfig(PreTrainedConfig):
     # Normalization
     normalization_mapping: dict[str, NormalizationMode] = field(
         default_factory=lambda: {
-            "VISUAL": NormalizationMode.MEAN_STD,
+            "VISUAL": NormalizationMode.IDENTITY,  # Images enter CLIP as raw [0,1]; no dataset-level normalization (matches TRI)
             "STATE": NormalizationMode.MIN_MAX,
             "ACTION": NormalizationMode.MIN_MAX,
         }

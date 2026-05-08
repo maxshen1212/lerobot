@@ -287,7 +287,7 @@ class ObservationEncoder(nn.Module):
             images = self.resize(images)
         if self.do_crop:
             images = self.maybe_random_crop(images) if self.training else self.center_crop(images)
-        return images
+        return self.clip_normalize(images)
 
     def _setup_preprocessing(self, config):
         if config.image_resize_shape is not None:
@@ -309,6 +309,13 @@ class ObservationEncoder(nn.Module):
                 self.maybe_random_crop = self.center_crop
         else:
             self.do_crop = False
+
+        # CLIP expects images normalized with its pretraining stats (matches TRI's imagenet_norm=True).
+        # These are CLIP's actual stats, close to but distinct from standard ImageNet mean/std.
+        self.clip_normalize = torchvision.transforms.Normalize(
+            mean=[0.48145466, 0.4578275, 0.40821073],
+            std=[0.26862954, 0.26130258, 0.27577711],
+        )
 
     def _setup_vector_output(self):
         total_dim = 0
