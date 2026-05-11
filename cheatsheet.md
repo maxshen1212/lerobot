@@ -80,7 +80,7 @@ lerobot-train \
   --dataset.image_transforms.enable=true
 
 # DiT (training all episodes)
-export CUDA_VISIBLE_DEVICES=5,6,7
+export CUDA_VISIBLE_DEVICES=1,5,6
 echo $CUDA_VISIBLE_DEVICES
 
 
@@ -90,11 +90,11 @@ accelerate launch \
   --main_process_port 0 \
   $(which lerobot-train) \
   --dataset.repo_id=lbm_sim/ego_BimanualPlaceAppleFromBowlOnCuttingBoard \
-  --dataset.root=/data/maxshen/lerobot_training_data_v3/ego_BimanualPlaceAppleFromBowlOnCuttingBoard_lang_after_split/train \
-  --val_root=/data/maxshen/lerobot_training_data_v3/ego_BimanualPlaceAppleFromBowlOnCuttingBoard_lang_after_split/val \
+  --dataset.root=/data/maxshen/lerobot_training_data_v3/ego_BimanualPlaceAppleFromBowlOnCuttingBoard_lang \
   --policy.type=multi_task_dit \
   --policy.repo_id=CHIH-HAN/tri-DiT-BimanualPlaceAppleFromBowlOnCuttingBoard \
   --policy.push_to_hub=true \
+  --output_dir="./outputs/multitask_dit_tri"
   --job_name="multitask-dit" \
   --wandb.enable=true \
   --wandb.entity=chihhans-usc \
@@ -118,7 +118,7 @@ accelerate launch \
   --policy.dropout=0.1 \
   --policy.timestep_embed_dim=256 \
   --policy.objective=diffusion \
-  --policy.optimizer_lr=1e-5 \
+  --policy.optimizer_lr=1.4e-5 \
   --policy.optimizer_weight_decay=1e-6 \
   --policy.scheduler_warmup_steps=1000 \
   --policy.vision_encoder_name=openai/clip-vit-base-patch16 \
@@ -132,7 +132,6 @@ accelerate launch \
   --num_workers=14 \
   --save_freq=5000 \
   --log_freq=100 \
-  --val_freq=5000 \
   --steps=50000 \
   --batch_size=32 \
   --eval_freq=5000000
@@ -140,55 +139,49 @@ accelerate launch \
 #########################################
 #         LIBERO Training Script        #
 #########################################
-accelerate launch \
+CUDA_VISIBLE_DEVICES=1,4,5,6 accelerate launch \
   --multi_gpu \
-  --num_processes=3 \
+  --num_processes=4 \
   --main_process_port 0 \
   $(which lerobot-train) \
   --dataset.repo_id=HuggingFaceVLA/libero \
-  --output_dir="./outputs/multitask_dit_libero" \
   --policy.type=multi_task_dit \
   --policy.push_to_hub=false \
+  --output_dir="./outputs/multitask_dit_libero2" \
   --job_name="multitask-dit-libero" \
   --wandb.enable=true \
   --wandb.entity=chihhans-usc \
   --wandb.project=SLURM_Lerobot \
   --dataset.image_transforms.enable=true \
   --dataset.image_transforms.max_num_transforms=4 \
-  --dataset.image_transforms.tfs='{"brightness":{"type":"ColorJitter","kwargs":{"brightness":[0.75,1.25]}},"contrast":{"type":"ColorJitter","kwargs":{"contrast":[0.6,1.4]}},"saturation":{"type":"ColorJitter","kwargs":{"saturation":[0.8,1.2]}},"hue":{"type":"ColorJitter","kwargs":{"hue":[-0.05,0.05]}}}' \
+  --dataset.image_transforms.tfs='{"brightness":{"type":"ColorJitter","kwargs":{"brightness":[0.75,1.25]}},"contrast":{"type":"ColorJitter","kwargs":{"contrast":[0.6,1.4]}},"saturation":{"type":"ColorJitter","kwargs":{"saturation":[0.8,1.2]}},"hue":{"type":"ColorJitter","kwargs":{"hue":[-0.05,0.05]}},"sharpness":{"type":"SharpnessJitter","kwargs":{"sharpness":[0.6,1.4]}},"rotation":{"type":"RandomRotation","kwargs":{"degrees":[-5,5]}},"translation":{"type":"RandomAffine","kwargs":{"degrees":0,"translate":[0.1,0.1]}}}' \
   --dataset.video_backend=torchcodec \
-  --policy.use_amp=true \
-  --policy.noise_scheduler_type=DDIM \
   --policy.train_diffusion_n_samples=8 \
-  --policy.horizon=16 \
-  --policy.n_action_steps=8 \
+  --policy.use_amp=true \
+  --policy.horizon=48 \
   --policy.n_obs_steps=2 \
-  --policy.num_inference_steps=8 \
-  --policy.use_rope=false \
-  --policy.use_positional_encoding=true \
+  --policy.use_rope=true \
+  --policy.use_positional_encoding=false \
   --policy.hidden_dim=768 \
-  --policy.num_layers=10 \
+  --policy.num_layers=8 \
   --policy.num_heads=12 \
   --policy.dropout=0.1 \
   --policy.timestep_embed_dim=256 \
   --policy.objective=diffusion \
-  --policy.optimizer_lr=1e-5 \
-  --policy.optimizer_weight_decay=1e-6 \
-  --policy.scheduler_warmup_steps=1000 \
+  --policy.optimizer_lr=1.2e-4 \
+  --policy.optimizer_weight_decay=0 \
+  --policy.scheduler_warmup_steps=0 \
   --policy.vision_encoder_name=openai/clip-vit-base-patch16 \
-  --policy.image_resize_shape=[256,342] \
-  --policy.image_crop_shape=[224,224] \
+  --policy.image_resize_shape=[256,256] \
   --policy.image_crop_is_random=true \
-  --policy.text_encoder_name=openai/clip-vit-base-patch32 \
+  --policy.text_encoder_name=openai/clip-vit-base-patch16 \
   --policy.vision_encoder_lr_multiplier=0.1 \
-  --policy.scheduler_name=constant \
   --policy.device=cuda \
   --num_workers=14 \
-  --save_freq=5000 \
+  --save_freq=4000 \
   --log_freq=100 \
-  --steps=50000 \
-  --batch_size=32 \
-  --eval_freq=5000000
+  --steps=31000 \
+  --batch_size=32
 
   python /data/maxshen/lerobot/run_eval.py \
   --output_dir=./eval_logs/ \
@@ -196,19 +189,19 @@ accelerate launch \
   --env.task=libero_spatial,libero_object,libero_goal,libero_10 \
   --eval.batch_size=1 \
   --eval.n_episodes=10 \
-  --policy.path=/data/maxshen/lerobot/outputs/multitask_dit_libero/checkpoints/100000/pretrained_model \
-  --policy.n_action_steps=8 \
+  --policy.path=/data/maxshen/lerobot/outputs/multitask_dit_libero/checkpoints/030000/pretrained_model \
+  --policy.n_action_steps=24 \
   --env.max_parallel_tasks=2
 
   python /data/maxshen/lerobot/run_eval.py \
-  --output_dir=./eval_logs/ \
+  --output_dir=./eval_logs2/ \
   --env.type=libero \
   --env.task=libero_spatial \
   --eval.batch_size=1 \
-  --eval.n_episodes=10 \
-  --policy.path=/data/maxshen/lerobot/outputs/multitask_dit_libero/checkpoints/100000/pretrained_model \
-  --policy.n_action_steps=8 \
-  --env.max_parallel_tasks=5
+  --eval.n_episodes=1 \
+  --policy.path=/data/maxshen/lerobot/outputs/multitask_dit_libero/checkpoints/004000/pretrained_model \
+  --policy.n_action_steps=24 \
+  --env.max_parallel_tasks=1
 
 
 #########################################

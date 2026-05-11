@@ -287,7 +287,7 @@ class ObservationEncoder(nn.Module):
             images = self.resize(images)
         if self.do_crop:
             images = self.maybe_random_crop(images) if self.training else self.center_crop(images)
-        return self.clip_normalize(images)
+        return images
 
     def _setup_preprocessing(self, config):
         if config.image_resize_shape is not None:
@@ -309,13 +309,6 @@ class ObservationEncoder(nn.Module):
                 self.maybe_random_crop = self.center_crop
         else:
             self.do_crop = False
-
-        # CLIP expects images normalized with its pretraining stats (matches TRI's imagenet_norm=True).
-        # These are CLIP's actual stats, close to but distinct from standard ImageNet mean/std.
-        self.clip_normalize = torchvision.transforms.Normalize(
-            mean=[0.48145466, 0.4578275, 0.40821073],
-            std=[0.26862954, 0.26130258, 0.27577711],
-        )
 
     def _setup_vector_output(self):
         total_dim = 0
@@ -520,11 +513,8 @@ class TransformerBlock(nn.Module):
                 hidden_size, num_heads=num_heads, batch_first=True, dropout=dropout
             )
 
-        # self.norm1 = nn.LayerNorm(hidden_size, elementwise_affine=False, eps=1e-6)
-        # self.norm2 = nn.LayerNorm(hidden_size, elementwise_affine=False, eps=1e-6)
-        # TODO: TRI-style RMSNorm (replace LayerNorm above)
-        self.norm1 = nn.RMSNorm(hidden_size, elementwise_affine=True, eps=1e-6)
-        self.norm2 = nn.RMSNorm(hidden_size, elementwise_affine=True, eps=1e-6)
+        self.norm1 = nn.LayerNorm(hidden_size, elementwise_affine=False, eps=1e-6)
+        self.norm2 = nn.LayerNorm(hidden_size, elementwise_affine=False, eps=1e-6)
 
         self.mlp = nn.Sequential(
             nn.Linear(hidden_size, hidden_size * 4),
@@ -572,30 +562,16 @@ class DiffusionTransformer(nn.Module):
         self.use_rope = config.use_rope
 
         self.timestep_embed_dim = config.timestep_embed_dim
-        # self.time_mlp = nn.Sequential(
-        #     SinusoidalPosEmb(self.timestep_embed_dim),
-        #     nn.Linear(self.timestep_embed_dim, 2 * self.timestep_embed_dim),
-        #     nn.GELU(),
-        #     nn.Linear(2 * self.timestep_embed_dim, self.timestep_embed_dim),
-        #     nn.GELU(),
-        # )
-        # TODO: TRI-style time MLP: 2-layer MLP + 4x expansion + Mish
         self.time_mlp = nn.Sequential(
             SinusoidalPosEmb(self.timestep_embed_dim),
-            nn.Linear(self.timestep_embed_dim, 4 * self.timestep_embed_dim),
-            nn.Mish(),
-            nn.Linear(4 * self.timestep_embed_dim, self.timestep_embed_dim),
+            nn.Linear(self.timestep_embed_dim, 2 * self.timestep_embed_dim),
+            nn.GELU(),
+            nn.Linear(2 * self.timestep_embed_dim, self.timestep_embed_dim),
+            nn.GELU(),
         )
-
 
         self.cond_dim = self.timestep_embed_dim + conditioning_dim
-        # self.input_proj = nn.Linear(self.action_dim, self.hidden_size)
-        # TODO: TRI-style action encoder: 2-layer MLP + 4x expansion + Mish
-        self.input_proj = nn.Sequential(
-            nn.Linear(self.action_dim, 4 * self.hidden_size),
-            nn.Mish(),
-            nn.Linear(4 * self.hidden_size, self.hidden_size),
-        )
+        self.input_proj = nn.Linear(self.action_dim, self.hidden_size)
 
         if config.use_positional_encoding:
             self.pos_embedding = nn.Parameter(
@@ -619,49 +595,13 @@ class DiffusionTransformer(nn.Module):
             ]
         )
 
-        # self.output_proj = nn.Linear(self.hidden_size, self.action_dim)
-        # TODO: TRI-style action decoder: 2-layer MLP with 4× hidden expansion + Mish
-        self.output_proj = nn.Sequential(
-            nn.Linear(self.hidden_size, 4 * self.hidden_size),
-            nn.Mish(),
-            nn.Linear(4 * self.hidden_size, self.action_dim),
-        )
-
-        # TODO: TRI-style final AdaLN before decoding (conditioning = timestep + observation)
-        self.final_norm = nn.RMSNorm(self.hidden_size, elementwise_affine=True, eps=1e-6)
-        self.final_adaLN_modulation = nn.Sequential(
-            nn.SiLU(), nn.Linear(self.cond_dim, 2 * self.hidden_size, bias=True)
-        )
-
+        self.output_proj = nn.Linear(self.hidden_size, self.action_dim)
         self._initialize_weights()
 
     def _initialize_weights(self):
-        # TODO: TRI-style xavier uniform init for all linear layers (run first as broad sweep)
-        for m in self.modules():
-            if isinstance(m, nn.Linear):
-                nn.init.xavier_uniform_(m.weight)
-                if m.bias is not None:
-                    nn.init.zeros_(m.bias)
-
-        # TODO: TRI-style normal(std=0.02) init for timestep MLP (overrides xavier above)
-        for m in self.time_mlp.modules():
-            if isinstance(m, nn.Linear):
-                nn.init.normal_(m.weight, mean=0.0, std=0.02)
-                if m.bias is not None:
-                    nn.init.zeros_(m.bias)
-
-        # AdaLN modulation zero-init (overrides xavier above)
         for block in self.transformer_blocks:
             nn.init.constant_(block.adaLN_modulation[-1].weight, 0)
             nn.init.constant_(block.adaLN_modulation[-1].bias, 0)
-
-        # Zero-init final AdaLN modulation and only the last linear of output_proj.
-        # Zeroing all layers of output_proj would kill gradients through the intermediate layer.
-        nn.init.constant_(self.final_adaLN_modulation[-1].weight, 0)
-        nn.init.constant_(self.final_adaLN_modulation[-1].bias, 0)
-        last_output_linear = [m for m in self.output_proj.modules() if isinstance(m, nn.Linear)][-1]
-        nn.init.constant_(last_output_linear.weight, 0)
-        nn.init.constant_(last_output_linear.bias, 0)
 
     def forward(self, x: Tensor, timestep: Tensor, conditioning_vec: Tensor) -> Tensor:
         _, seq_len, _ = x.shape
@@ -677,8 +617,6 @@ class DiffusionTransformer(nn.Module):
         for block in self.transformer_blocks:
             hidden_seq = block(hidden_seq, cond_features)
 
-        shift, scale = self.final_adaLN_modulation(cond_features).chunk(2, dim=-1)
-        hidden_seq = modulate(self.final_norm(hidden_seq), shift.unsqueeze(1), scale.unsqueeze(1))
         return self.output_proj(hidden_seq)
 
 
@@ -719,8 +657,6 @@ class DiffusionObjective(nn.Module):
         )
 
     def compute_loss(self, model: nn.Module, batch: dict[str, Tensor], conditioning_vec: Tensor) -> Tensor:
-        # Repeat each observation N times with different noise/timestep samples (TRI: N=8).
-        # Images are encoded once upstream; only actions and conditioning_vec are repeated.
         N = self.config.train_diffusion_n_samples
         clean_actions = batch[ACTION].repeat_interleave(N, dim=0)
         conditioning_vec = conditioning_vec.repeat_interleave(N, dim=0)
