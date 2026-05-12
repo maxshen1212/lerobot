@@ -1,26 +1,16 @@
 ```bash
 # conda
-conda create -y -n lerobot python=3.12
-conda activate lerobot
-# must install this
-conda install ffmpeg=7.1.1 -c conda-forge
-cd lerobot && pip install -e .
 conda env list
 conda deactivate
 conda remove -y -n lerobot --all
 
+conda create -y -n lerobot python=3.12
+conda activate lerobot
+conda install ffmpeg=7.1.1 -c conda-forge
+cd lerobot && pip install -e .
 pip install lerobot[multi_task_dit]
-
+conda install -n lerobot -c conda-forge "cmake>=3.18,<4"
 pip install -e ".[libero]"
-
-# LIBERO test
-sed -i 's|/tmp/robosuite.log|/data/maxshen/robosuite.log|' \
-  /data/maxshen/miniconda3/envs/lerobot/lib/python3.12/site-packages/robosuite/utils/log_utils.py
-
-python -m robosuite.scripts.setup_macros
-
-python -c "from robosuite.macros_private import *; print('OK')"
-
 
 # tmux
 tmux new -s window_name
