@@ -1,0 +1,62 @@
+# Bimanual SO-101 Dataset Recording Config
+# Usage: lerobot-record --config_path calibration/config/bimanual_so101_record_config.yaml
+#
+# Same robot + teleop blocks as the teleoperate config, plus a `dataset:` block.
+# During recording: RIGHT arrow = finish episode early / skip reset -> next episode,
+#                   LEFT arrow  = re-record the last episode,
+#                   ESC         = stop recording and save.
+
+robot:
+  type: bi_so_follower
+  id: bimanual_so101_follower
+  calibration_dir: /home/max/Desktop/lerobot/calibration/bimanual_follower
+  left_arm_config:
+    port: /dev/lerobot_follower_left
+    cameras:
+      ego_centric:
+        {
+          type: intelrealsense,
+          serial_number_or_name: "138422072598",
+          width: 640,
+          height: 480,
+          fps: 30,
+        }
+      # wrist: {type: intelrealsense, serial_number_or_name: "REPLACE_LEFT_WRIST_SN", width: 640, height: 480, fps: 30}
+  right_arm_config:
+    port: /dev/lerobot_follower_right
+    cameras:
+      third_person:
+        {
+          type: intelrealsense,
+          serial_number_or_name: "215322078630",
+          width: 640,
+          height: 480,
+          fps: 30,
+        }
+      # wrist: {type: intelrealsense, serial_number_or_name: "REPLACE_RIGHT_WRIST_SN", width: 640, height: 480, fps: 30}
+
+teleop:
+  type: bi_so_leader
+  id: bimanual_so101_leader
+  calibration_dir: /home/max/Desktop/lerobot/calibration/bimanual_leader
+  left_arm_config:
+    port: /dev/lerobot_leader_left
+  right_arm_config:
+    port: /dev/lerobot_leader_right
+
+dataset:
+  repo_id: ChihHanShen/bimanual_so101_pickplace # change to {your_hf_username}/{dataset_name}
+  root: /home/max/Desktop/lerobot/datasets/bimanual_so101_pickplace
+  single_task: "Pick up the cube and place it in the box." # describe the task accurately
+  fps: 30 # MUST match the camera fps above (record errors if mismatched)
+  num_episodes: 104
+  episode_time_s: 30 # seconds to record per episode
+  reset_time_s: 30 # seconds to reset the scene between episodes
+  video: true # encode frames to video (recommended)
+  push_to_hub: true # set true to upload to the Hugging Face Hub (requires `huggingface-cli login`)
+  # root: /home/max/Desktop/lerobot/datasets/bimanual_so101_pickplace  # optional local path; defaults to $HF_LEROBOT_HOME/repo_id
+
+# Display options (top-level RecordConfig fields)
+display_data: false # stream cameras + state to Rerun while recording
+play_sounds: true # vocal cues for episode start/stop
+resume: true # set true to append episodes to an existing dataset

@@ -1,0 +1,58 @@
+# Bimanual SO-101 Teleoperation Config
+# Usage: lerobot-teleoperate --config_path calibration/config/bimanual_so101_teleoperate_config.yaml
+#
+# Unlike calibration, teleoperation needs BOTH robot (follower) and teleop (leader)
+# in the SAME run. The id + calibration_dir below MUST match the values used during
+# calibration so the saved calibration files are loaded instead of re-running it:
+#   robot  -> calibration/bimanual_follower/bimanual_so101_follower_{left,right}.json
+#   teleop -> calibration/bimanual_leader/bimanual_so101_leader_{left,right}.json
+
+robot:
+  type: bi_so_follower
+  id: bimanual_so101_follower
+  calibration_dir: /home/max/Desktop/lerobot/calibration/bimanual_follower
+
+  # bi_so_follower has NO top-level cameras field: every camera must live under an arm.
+  # Camera keys are PREFIXED with the arm side in observations, so the names below become:
+  #   left_ego, right_third_person  (and left_wrist / right_wrist once the wrist cams arrive)
+  # Both detected cameras are D435I; verify ego vs third_person via outputs/captured_images/
+  # and swap the two serials if needed.
+  left_arm_config:
+    port: /dev/lerobot_follower_left
+    cameras:
+      ego:
+        {
+          type: intelrealsense,
+          serial_number_or_name: "215322078630",
+          width: 640,
+          height: 480,
+          fps: 30,
+        }
+      # TODO: add when wrist camera is connected (run `lerobot-find-cameras realsense` for its serial):
+      # wrist:        {type: intelrealsense, serial_number_or_name: "REPLACE_LEFT_WRIST_SN",  width: 640, height: 480, fps: 30}
+  right_arm_config:
+    port: /dev/lerobot_follower_right
+    cameras:
+      third_person:
+        {
+          type: intelrealsense,
+          serial_number_or_name: "138422072598",
+          width: 640,
+          height: 480,
+          fps: 30,
+        }
+      # TODO: add when wrist camera is connected:
+      # wrist:        {type: intelrealsense, serial_number_or_name: "REPLACE_RIGHT_WRIST_SN", width: 640, height: 480, fps: 30}
+
+teleop:
+  type: bi_so_leader
+  id: bimanual_so101_leader
+  calibration_dir: /home/max/Desktop/lerobot/calibration/bimanual_leader
+  left_arm_config:
+    port: /dev/lerobot_leader_left
+  right_arm_config:
+    port: /dev/lerobot_leader_right
+
+# Loop / display options (top-level TeleoperateConfig fields)
+fps: 30
+display_data: false # set true to stream cameras + state to Rerun
