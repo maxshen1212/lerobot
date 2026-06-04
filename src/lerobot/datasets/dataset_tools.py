@@ -803,10 +803,19 @@ def _copy_and_reindex_videos(
                     src_ep = src_dataset.meta.episodes[old_idx]
                     from_frame = round(src_ep[f"videos/{video_key}/from_timestamp"] * src_dataset.meta.fps)
                     to_frame = round(src_ep[f"videos/{video_key}/to_timestamp"] * src_dataset.meta.fps)
-                    assert src_ep["length"] == to_frame - from_frame, (
-                        f"Episode length mismatch: {src_ep['length']} vs {to_frame - from_frame}"
-                    )
-                    episodes_to_keep_ranges.append((from_frame, to_frame))
+                    # The data table is the source of truth for episode length. Some recordings
+                    # contain a few extra trailing video frames with no corresponding data row
+                    # (camera kept emitting frames past the last logged step), so the timestamp
+                    # span can exceed `length`. Keep exactly `length` frames -- the ones the data
+                    # actually references -- so the re-encoded video stays aligned with the data
+                    # and matches the new metadata computed from `length` below.
+                    n_frames = src_ep["length"]
+                    if to_frame - from_frame < n_frames:
+                        raise ValueError(
+                            f"Episode {old_idx} of {video_key} has fewer video frames "
+                            f"({to_frame - from_frame}) than data rows ({n_frames}); cannot re-encode."
+                        )
+                    episodes_to_keep_ranges.append((from_frame, from_frame + n_frames))
 
                 # Use PyAV filters to efficiently re-encode only the desired segments.
                 assert src_dataset.meta.video_path is not None
