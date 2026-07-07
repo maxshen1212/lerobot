@@ -21,6 +21,22 @@ robot:
           height: 480,
           fps: 30,
         }
+      left_wrist:
+        {
+          type: intelrealsense,
+          serial_number_or_name: "138422072598",
+          width: 640,
+          height: 480,
+          fps: 30,
+        }
+      right_wrist:
+        {
+          type: intelrealsense,
+          serial_number_or_name: "138422072598",
+          width: 640,
+          height: 480,
+          fps: 30,
+        }
       # wrist: {type: intelrealsense, serial_number_or_name: "REPLACE_LEFT_WRIST_SN", width: 640, height: 480, fps: 30}
   right_arm_config:
     port: /dev/lerobot_follower_right
