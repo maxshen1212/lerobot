@@ -10,7 +10,7 @@
 robot:
   type: bi_so_follower
   id: bimanual_so101_follower
-  calibration_dir: /home/max/Desktop/lerobot/calibration/bimanual_follower
+  calibration_dir: /home/air-420/Desktop/lerobot/calibration/bimanual_follower
 
   # bi_so_follower has NO top-level cameras field: every camera must live under an arm.
   # Camera keys are PREFIXED with the arm side in observations, so the names below become:
@@ -20,10 +20,10 @@ robot:
   left_arm_config:
     port: /dev/lerobot_follower_left
     cameras:
-      ego:
+      wrist:
         {
           type: intelrealsense,
-          serial_number_or_name: "215322078630",
+          serial_number_or_name: "138422071840",
           width: 640,
           height: 480,
           fps: 30,
@@ -33,7 +33,7 @@ robot:
   right_arm_config:
     port: /dev/lerobot_follower_right
     cameras:
-      third_person:
+      wrist:
         {
           type: intelrealsense,
           serial_number_or_name: "138422072598",
@@ -47,7 +47,7 @@ robot:
 teleop:
   type: bi_so_leader
   id: bimanual_so101_leader
-  calibration_dir: /home/max/Desktop/lerobot/calibration/bimanual_leader
+  calibration_dir: /home/air-420/Desktop/lerobot/calibration/bimanual_leader
   left_arm_config:
     port: /dev/lerobot_leader_left
   right_arm_config:

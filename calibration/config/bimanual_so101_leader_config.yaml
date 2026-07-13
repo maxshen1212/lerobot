@@ -10,7 +10,7 @@
 teleop:
   type: bi_so_leader
   id: bimanual_so101_leader # filename prefix for the per-arm calibration files
-  calibration_dir: /home/max/Desktop/lerobot/calibration/bimanual_leader
+  calibration_dir: /home/air-420/Desktop/lerobot/calibration/bimanual_leader
 
   # Only `port` is used for leader arms; BiSOLeader ignores any other per-arm fields.
   left_arm_config:

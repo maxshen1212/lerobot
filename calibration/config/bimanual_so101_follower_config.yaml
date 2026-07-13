@@ -10,7 +10,7 @@
 robot:
   type: bi_so_follower
   id: bimanual_so101_follower # filename prefix for the per-arm calibration files
-  calibration_dir: /home/max/Desktop/lerobot/calibration/bimanual_follower
+  calibration_dir: /home/air-420/Desktop/lerobot/calibration/bimanual_follower
 
   left_arm_config:
     port: /dev/lerobot_follower_left
