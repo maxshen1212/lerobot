@@ -28,6 +28,14 @@ robot:
           height: 480,
           fps: 30,
         }
+      ego:
+        {
+          type: intelrealsense,
+          serial_number_or_name: "138422076217",
+          width: 640,
+          height: 480,
+          fps: 15,
+        }
       # TODO: add when wrist camera is connected (run `lerobot-find-cameras realsense` for its serial):
       # wrist:        {type: intelrealsense, serial_number_or_name: "REPLACE_LEFT_WRIST_SN",  width: 640, height: 480, fps: 30}
   right_arm_config:
@@ -55,4 +63,4 @@ teleop:
 
 # Loop / display options (top-level TeleoperateConfig fields)
 fps: 30
-display_data: false # set true to stream cameras + state to Rerun
+display_data: true # set true to stream cameras + state to Rerun

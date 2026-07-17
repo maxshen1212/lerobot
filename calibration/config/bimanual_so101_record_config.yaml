@@ -21,6 +21,14 @@ robot:
           height: 480,
           fps: 15,
         }
+      ego:
+        {
+          type: intelrealsense,
+          serial_number_or_name: "138422076217",
+          width: 640,
+          height: 480,
+          fps: 15,
+        }
       # ego:
       #   {
       #     type: intelrealsense,
@@ -32,16 +40,15 @@ robot:
       # wrist: {type: intelrealsense, serial_number_or_name: "REPLACE_LEFT_WRIST_SN", width: 640, height: 480, fps: 30}
   right_arm_config:
     port: /dev/lerobot_follower_right
-    # cameras:
-    #   wrist:
-    #     {
-    #       type: intelrealsense,
-    #       serial_number_or_name: "138422072598",
-    #       width: 640,
-    #       height: 480,
-    #       fps: 15,
-    #     }
-    # wrist: {type: intelrealsense, serial_number_or_name: "REPLACE_RIGHT_WRIST_SN", width: 640, height: 480, fps: 30}
+    cameras:
+      wrist:
+        {
+          type: intelrealsense,
+          serial_number_or_name: "138422072598",
+          width: 640,
+          height: 480,
+          fps: 15,
+        }
 
 teleop:
   type: bi_so_leader
@@ -53,18 +60,19 @@ teleop:
     port: /dev/lerobot_leader_right
 
 dataset:
-  repo_id: ChihHanShen/bimanual_so101_tube_pickplace # change to {your_hf_username}/{dataset_name}
-  root: /home/air-420/Desktop/lerobot/datasets/bimanual_so101_tube_pickplace
-  single_task: "Pick up four tubes one by one and place them in the box"
+  repo_id: ChihHanShen/bimanual_so101_vial_pickplace_real # change to {your_hf_username}/{dataset_name}
+  root: /home/max/Desktop/lerobot/datasets/bimanual_so101_vial_pickplace_real
+  single_task: "Pick up four vials one by one and place them in the box"
   fps: 15 # 30 # MUST match the camera fps above (record errors if mismatched)
-  num_episodes: 1
-  episode_time_s: 50 # seconds to record per episodes
-  reset_time_s: 30 # seconds to reset the scene between episodes
+  num_episodes: 4
+
+  episode_time_s: 70 # seconds to record per episodes
+  reset_time_s: 50 # seconds to reset the scene between episodes
   video: true # encode frames to video (recommended)
   push_to_hub: false # set true to upload to the Hugging Face Hub (requires `huggingface-cli login`)
-  # root: /home/air-420/Desktop/lerobot/datasets/bimanual_so101_pickplace  # optional local path; defaults to $HF_LEROBOT_HOME/repo_id
+  # root: /home/max/Desktop/lerobot/datasets/bimanual_so101_pickplace  # optional local path; defaults to $HF_LEROBOT_HOME/repo_id
 
 # Display options (top-level RecordConfig fields)
-display_data: false # stream cameras + state to Rerun while recording
+display_data: false # stream came
 play_sounds: true # vocal cues for episode start/stop
 resume: false # set true to append episodes to an existing dataset
