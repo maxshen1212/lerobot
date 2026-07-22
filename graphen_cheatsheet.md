@@ -1,10 +1,3 @@
-# official example: single so-101 calibration
-
-lerobot-calibrate \
- --robot.type=so101_follower \
- --robot.port=/dev/lerobot_follower_right \
- --robot.id=my_awesome_follower_arm
-
 # Setting steps
 
 lerobot-find-port
@@ -43,14 +36,14 @@ lerobot-record --config_path=calibration/config/bimanual_so101_record_config.yam
 lerobot-replay \
  --robot.type=bi_so_follower \
  --robot.id=bimanual_so101_follower \
- --robot.calibration_dir=/home/max/Desktop/lerobot/calibration/bimanual_follower \
- --robot.left_arm_config.port=/dev/lerobot_follower_left \
+ --robot.calibration_dir=/home/graphen/sim2real/lerobot/calibration/bimanual_follower \
+ --robot.left_arm_config.port=/dev/ttyFollowerLeft \
  --robot.left_arm_config.use_degrees=true \
- --robot.right_arm_config.port=/dev/lerobot_follower_right \
+ --robot.right_arm_config.port=/dev/ttyFollowerRight \
  --robot.right_arm_config.use_degrees=true \
  --dataset.repo_id=ChihHanShen/bimanual-so101-pickvials \
- --dataset.root=/home/max/Desktop/lerobot/datasets/bimanual-so101-pickvials \
- --dataset.episode=1 \
+ --dataset.root=/home/graphen/sim2real/lerobot/datasets/bimanual_so101_vial_pickplace_real \
+ --dataset.episode=0 \
  --dataset.fps=30
 
 lerobot-edit-dataset \
