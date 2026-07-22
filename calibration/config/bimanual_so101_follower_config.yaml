@@ -10,16 +10,16 @@
 robot:
   type: bi_so_follower
   id: bimanual_so101_follower # filename prefix for the per-arm calibration files
-  calibration_dir: /home/air-420/Desktop/lerobot/calibration/bimanual_follower
+  calibration_dir: /home/graphen/sim2real/lerobot/calibration/bimanual_follower
 
   left_arm_config:
-    port: /dev/lerobot_follower_left
+    port: /dev/ttyFollowerLeft
     use_degrees: true # keep true for SO-101 policy compatibility
     disable_torque_on_disconnect: true
     max_relative_target: null # set a positive float (e.g. 5.0) to cap motor movement for safety
 
   right_arm_config:
-    port: /dev/lerobot_follower_right
+    port: /dev/ttyFollowerRight
     use_degrees: true
     disable_torque_on_disconnect: true
     max_relative_target: null

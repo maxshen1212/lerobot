@@ -10,7 +10,7 @@
 robot:
   type: bi_so_follower
   id: bimanual_so101_follower
-  calibration_dir: /home/air-420/Desktop/lerobot/calibration/bimanual_follower
+  calibration_dir: /home/graphen/sim2real/lerobot/calibration/bimanual_follower
 
   # bi_so_follower has NO top-level cameras field: every camera must live under an arm.
   # Camera keys are PREFIXED with the arm side in observations, so the names below become:
@@ -18,48 +18,45 @@ robot:
   # Both detected cameras are D435I; verify ego vs third_person via outputs/captured_images/
   # and swap the two serials if needed.
   left_arm_config:
-    port: /dev/lerobot_follower_left
-    cameras:
-      wrist:
-        {
-          type: intelrealsense,
-          serial_number_or_name: "138422071840",
-          width: 640,
-          height: 480,
-          fps: 30,
-        }
-      ego:
-        {
-          type: intelrealsense,
-          serial_number_or_name: "138422076217",
-          width: 640,
-          height: 480,
-          fps: 15,
-        }
-      # TODO: add when wrist camera is connected (run `lerobot-find-cameras realsense` for its serial):
-      # wrist:        {type: intelrealsense, serial_number_or_name: "REPLACE_LEFT_WRIST_SN",  width: 640, height: 480, fps: 30}
+    port: /dev/ttyFollowerLeft
+    # cameras:
+    #   wrist:
+    #     {
+    #       type: intelrealsense,
+    #       serial_number_or_name: "138422071840",
+    #       width: 640,
+    #       height: 480,
+    #       fps: 30,
+    #     }
+    #   ego:
+    #     {
+    #       type: intelrealsense,
+    #       serial_number_or_name: "138422076217",
+    #       width: 640,
+    #       height: 480,
+    #       fps: 15,
+    #     }
+
   right_arm_config:
-    port: /dev/lerobot_follower_right
-    cameras:
-      wrist:
-        {
-          type: intelrealsense,
-          serial_number_or_name: "138422072598",
-          width: 640,
-          height: 480,
-          fps: 30,
-        }
-      # TODO: add when wrist camera is connected:
-      # wrist:        {type: intelrealsense, serial_number_or_name: "REPLACE_RIGHT_WRIST_SN", width: 640, height: 480, fps: 30}
+    port: /dev/ttyFollowerRight
+    # cameras:
+    #   wrist:
+    #     {
+    #       type: intelrealsense,
+    #       serial_number_or_name: "138422072598",
+    #       width: 640,
+    #       height: 480,
+    #       fps: 30,
+    #     }
 
 teleop:
   type: bi_so_leader
   id: bimanual_so101_leader
-  calibration_dir: /home/air-420/Desktop/lerobot/calibration/bimanual_leader
+  calibration_dir: /home/graphen/sim2real/lerobot/calibration/bimanual_leader
   left_arm_config:
-    port: /dev/lerobot_leader_left
+    port: /dev/ttyLeaderLeft
   right_arm_config:
-    port: /dev/lerobot_leader_right
+    port: /dev/ttyLeaderRight
 
 # Loop / display options (top-level TeleoperateConfig fields)
 fps: 30
