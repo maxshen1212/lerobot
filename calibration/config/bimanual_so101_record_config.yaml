@@ -53,7 +53,7 @@ teleop:
 dataset:
   repo_id: ChihHanShen/bimanual_so101_vial_pickplace_real # change to {your_hf_username}/{dataset_name}
   root: /home/graphen/sim2real/lerobot/datasets/bimanual_so101_vial_pickplace_real
-  single_task: "Pick up four vials one by one and place them in the box"
+  single_task: "Pick up the vials and place them into the rack"
   fps: 30 # 30 # MUST match the camera fps above (record errors if mismatched)
   num_episodes: 4
 
