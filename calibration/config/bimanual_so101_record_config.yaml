@@ -12,34 +12,39 @@ robot:
   calibration_dir: /home/graphen/sim2real/lerobot/calibration/bimanual_follower
   left_arm_config:
     port: /dev/ttyFollowerLeft
-    cameras:
-      # wrist_left:
-      #   {
-      #     type: intelrealsense,
-      #     serial_number_or_name: "138422071840",
-      #     width: 640,
-      #     height: 480,
-      #     fps: 30,
-      #   }
-      center:
-        {
-          type: intelrealsense,
-          serial_number_or_name: "138422076217",
-          width: 640,
-          height: 480,
-          fps: 30,
-        }
   right_arm_config:
     port: /dev/ttyFollowerRight
-    # cameras:
-    #   wrist_right:
-    #     {
-    #       type: intelrealsense,
-    #       serial_number_or_name: "138422072598",
-    #       width: 640,
-    #       height: 480,
-    #       fps: 30,
-    #     }
+  # Top-level cameras: keys are kept AS-IS (no `left_`/`right_` prefix), unlike
+  # cameras declared under `{left,right}_arm_config.cameras`. This makes the dataset
+  # columns `observation.images.{wrist_left,center,wrist_right}`, matching the sim
+  # dataset and GR00T's `examples/SO101_bimanual/modality.json` exactly.
+  # NOTE: the no-prefix exemption only applies to the left arm, so `wrist_right`
+  # must live here too — under `right_arm_config` it would become `right_wrist_right`.
+  cameras:
+    wrist_left:
+      {
+        type: intelrealsense,
+        serial_number_or_name: "138422071840",
+        width: 640,
+        height: 480,
+        fps: 30,
+      }
+    center:
+      {
+        type: intelrealsense,
+        serial_number_or_name: "138422076217",
+        width: 640,
+        height: 480,
+        fps: 30,
+      }
+    wrist_right:
+      {
+        type: intelrealsense,
+        serial_number_or_name: "138422072598",
+        width: 640,
+        height: 480,
+        fps: 30,
+      }
 
 teleop:
   type: bi_so_leader
@@ -55,15 +60,30 @@ dataset:
   root: /home/graphen/sim2real/lerobot/datasets/bimanual_so101_vial_pickplace_real
   single_task: "Pick up the vials and place them into the rack"
   fps: 30 # 30 # MUST match the camera fps above (record errors if mismatched)
-  num_episodes: 4
+  num_episodes: 20
 
-  episode_time_s: 70 # seconds to record per episodes
-  reset_time_s: 50 # seconds to reset the scene between episodes
+  episode_time_s: 90 # seconds to record per episodes
+  reset_time_s: 60 # seconds to reset the scene between episodes
   video: true # encode frames to video (recommended)
+
+  # --- video encoding ---
+  # Encode frames in real-time during capture (per-camera encoder threads) instead of
+  # writing PNGs and encoding the whole episode inside save_episode(). Keeps the main
+  # loop responsive at episode boundaries.
+  streaming_encoding: true
+  # ~3s of buffer per camera (default 30 = 1s). Absorbs bursts when RIGHT arrow skips
+  # the reset phase; a full queue silently DROPS frames and desyncs video from actions.
+  encoder_queue_maxsize: 90
+  # Benchmarked on this machine (i9-13900E, 8 physical cores, 3 cameras @ 640x480):
+  # lp=1 -> 146 fps/cam, lp=2 -> 215, lp=3 -> 205, lp=4 -> 199, auto(lp=5) -> 194.
+  # 2 is the throughput peak AND uses the fewest threads (6 total), leaving cores for
+  # motor I/O + RealSense reads. ~7x headroom over the 30 fps requirement.
+  # NOTE: ignored by hardware encoders (NVENC) — only affects libsvtav1/h264/hevc.
+  encoder_threads: 2
   push_to_hub: false # set true to upload to the Hugging Face Hub (requires `huggingface-cli login`)
   # root: /home/max/Desktop/lerobot/datasets/bimanual_so101_pickplace  # optional local path; defaults to $HF_LEROBOT_HOME/repo_id
 
 # Display options (top-level RecordConfig fields)
 display_data: false # stream came
 play_sounds: true # vocal cues for episode start/stop
-resume: false # set true to append episodes to an existing dataset
+resume: true # set true to append episodes to an existing dataset

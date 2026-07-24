@@ -1,104 +1,150 @@
-# Setting steps
+# Graphen — Bimanual SO-101 real-robot cheatsheet
 
-lerobot-find-port
-graphen-setup-udev
+本專案的實機命令記錄。目前 real 資料集：
+`ChihHanShen/bimanual_so101_vial_pickplace_real` @ `/home/graphen/sim2real/lerobot/datasets/bimanual_so101_vial_pickplace_real`
 
-// list connected RealSense cameras + their serial numbers (paste into the teleop config)
+## 0. 一次性設定 (setup)
 
-lerobot-find-cameras realsense
+```bash
+lerobot-find-port                     # 找 leader/follower 序列埠
+graphen-setup-udev                    # 建立 /dev/tty{Leader,Follower}{Left,Right} 穩定 symlink
+lerobot-find-cameras realsense        # 列出 RealSense 序號 (貼進 record/teleop config)
 
 lerobot-calibrate --config_path=calibration/config/bimanual_so101_follower_config.yaml
-
 lerobot-calibrate --config_path=calibration/config/bimanual_so101_leader_config.yaml
+```
 
+## 1. Teleop (無錄製，純遙操作測試)
+
+```bash
 lerobot-teleoperate --config_path=calibration/config/bimanual_so101_teleoperate_config.yaml
+```
 
-# 錄製資料集 (record a dataset)
+## 2. 錄製資料集 (record)
 
-#
-
-# 鍵盤控制 (pynput 全域監聽；需要有畫面顯示 — 無頭環境下會停用):
-
-# → 右方向鍵 : 提早結束目前步驟。錄製中 = 停止錄製這一集並進入下一步；
-
-# 重置等待期間 = 略過等待，直接開始下一集。
-
-# ← 左方向鍵 : 提早結束並「重新錄製」上一集 (丟棄後重錄)。
-
-# Esc : 完全停止資料錄製 (結束整個錄製流程)。
-
-#
-
-# 注意：擷取按鍵可能需要 sudo，讓終端機能夠監聽鍵盤事件。
-
+```bash
 lerobot-record --config_path=calibration/config/bimanual_so101_record_config.yaml
+```
 
+錄製中鍵盤控制 (pynput 全域監聽，需有畫面；無頭環境停用，擷取按鍵可能需 sudo)：
+
+| 鍵         | 錄製中               | 重置等待中               |
+| ---------- | -------------------- | ------------------------ |
+| → 右方向鍵 | 停止這一集、進下一步 | 略過等待、直接開始下一集 |
+| ← 左方向鍵 | 丟棄並重錄上一集     | —                        |
+| Esc        | 完全停止並存檔       | 完全停止並存檔           |
+
+> 編碼參數 (streaming / encoder*threads=2 / queue=90 / av1) 已在 record config 內調校，
+> 與 sim 資料集 codec 對齊。相機 key = `wrist_left` / `center` / `wrist_right` (無 left*/right\_ 前綴)。
+
+## 3. 檢查資料品質 (QA)
+
+```bash
+# (a) 影片幀數 vs action/state 幀數是否對齊 (抓 streaming 掉幀)
+uv run python tools/check_frame_alignment.py datasets/bimanual_so101_vial_pickplace_real
+
+# (b) 列出每個 episode 對應的 mp4 檔號與時間段 (一個 mp4 內含多集!)
+uv run python tools/view_episode.py datasets/bimanual_so101_vial_pickplace_real --list
+
+# (c) 抽出單一 episode、三台相機一起切片並開啟 (例: ep 47)
+uv run python tools/view_episode.py datasets/bimanual_so101_vial_pickplace_real 47
+#   單一相機、不自動開: --cam center --no-open
+
+# (d) 完整視覺化: 影片 + 12 維 state/action 曲線同步播放 (Rerun 視窗)
+uv run lerobot-dataset-viz \
+  --repo-id ChihHanShen/bimanual_so101_vial_pickplace_real \
+  --root datasets/bimanual_so101_vial_pickplace_real --episode-index 47
+```
+
+> ⚠️ mp4 檔名是「檔號 file-XXX」，**不是 episode_index**，且一個 mp4 串了多集。
+> 想看某一集一定要用 `view_episode.py` 或 `dataset-viz` 查表，不能直接點 mp4 猜。
+
+## 4. 刪除品質不好的 episode
+
+```bash
+uv run lerobot-edit-dataset \
+  --repo_id ChihHanShen/bimanual_so101_vial_pickplace_real \
+  --root datasets/bimanual_so101_vial_pickplace_real \
+  --new_root datasets/bimanual_so101_vial_pickplace_real \
+  --operation.type delete_episodes \
+  --operation.episode_indices "[4, 21, 59]"
+
+# 刪完必驗
+uv run python tools/check_frame_alignment.py datasets/bimanual_so101_vial_pickplace_real
+```
+
+> **兩個坑：**
+>
+> 1. **一定要給 `--root`** (v2 語意：`--root`/`--new_root` = 資料集資料夾本身，不再拼 repo_id)。
+>    不給會去找 HF 快取而找不到。`--root`==`--new_root` = 原地改並自動留 `_bak` 備份。
+> 2. **`episode_indices` 用 episode_index，每刪一次就 reindex** → 要刪的一次全列進去，勿分批。
+>
+> (workshop 的 `tools/delete_episodes.py` 是用穩定「檔號」刪、且 ROOT 寫死指向 sim 資料集，勿混用。)
+
+## 5. Replay (在真機重播某一集，驗證校正/接線)
+
+```bash
 lerobot-replay \
- --robot.type=bi_so_follower \
- --robot.id=bimanual_so101_follower \
- --robot.calibration_dir=/home/graphen/sim2real/lerobot/calibration/bimanual_follower \
- --robot.left_arm_config.port=/dev/ttyFollowerLeft \
- --robot.left_arm_config.use_degrees=true \
- --robot.right_arm_config.port=/dev/ttyFollowerRight \
- --robot.right_arm_config.use_degrees=true \
- --dataset.repo_id=ChihHanShen/bimanual-so101-pickvials \
- --dataset.root=/home/graphen/sim2real/lerobot/datasets/bimanual_so101_vial_pickplace_real \
- --dataset.episode=0 \
- --dataset.fps=30
+  --robot.type=bi_so_follower --robot.id=bimanual_so101_follower \
+  --robot.calibration_dir=/home/graphen/sim2real/lerobot/calibration/bimanual_follower \
+  --robot.left_arm_config.port=/dev/ttyFollowerLeft  --robot.left_arm_config.use_degrees=true \
+  --robot.right_arm_config.port=/dev/ttyFollowerRight --robot.right_arm_config.use_degrees=true \
+  --dataset.repo_id=ChihHanShen/bimanual_so101_vial_pickplace_real \
+  --dataset.root=/home/graphen/sim2real/lerobot/datasets/bimanual_so101_vial_pickplace_real \
+  --dataset.episode=0 --dataset.fps=30
+```
 
-lerobot-edit-dataset \
- --repo_id ChihHanShen/bimanual_so101_pickplace \
- --operation.type delete_episodes \
- --operation.episode_indices "[4, 21, 22, 64]"
+## 6. 上傳到 Hugging Face (公開)
 
-# ── train a diffusion policy (the run that produced the checkpoint below) ──
+這版 lerobot 沒有專門的上傳 CLI；對已錄好的本機資料，官方做法是 Python `push_to_hub()`。
+本機資料夾名 (底線) 與 HF 目標名 (連字號) 不同 — repo_id 只是上傳目標標籤，info.json 不存它，換名上傳沒問題。
 
-lerobot-train \
- --dataset.repo_id=ChihHanShen/bimanual_so101_pickplace_95 \
- --dataset.root=/home/max/Desktop/lerobot/datasets/bimanual_so101_pickplace_95 \
- --policy.repo_id=CHIH-HAN/graphen-diffusion \
- --batch_size=4 --steps=1000 --log_freq=100 --save_freq=5000 --num_workers=8 \
- --save_checkpoint=true \
- --policy.type=diffusion --policy.device=cuda \
- --policy.use_separate_rgb_encoder_per_camera=false \
- --policy.pretrained_backbone_weights="ResNet18_Weights.IMAGENET1K_V1" \
- --policy.use_group_norm=false \
- --policy.resize_shape=[240,320] --policy.crop_ratio=0.9 \
- --policy.noise_scheduler_type=DDIM \
- --wandb.enable=false --wandb.entity=chihhans-usc --wandb.project=Graphen \
- --dataset.image_transforms.enable=true \
- --policy.push_to_hub=false
+```bash
+# 一次性登入 (需 write token: https://huggingface.co/settings/tokens)
+uv run hf auth login
 
-# ── inference / deploy the trained policy on the real robot ──
+# 上傳前先驗證對齊 (壞集要先用第 4 節刪掉)
+uv run python tools/check_frame_alignment.py datasets/bimanual_so101_vial_pickplace_real
+```
 
-# lerobot-record is data-collection only now; use lerobot-rollout to run a policy.
+### 6a. 首次上傳 / 只是加更多集 (append)
 
-# --strategy.type=base -> autonomous rollout, no recording.
+```bash
+cd /home/graphen/sim2real/lerobot
+uv run python -c '
+from lerobot.datasets.lerobot_dataset import LeRobotDataset
+ds = LeRobotDataset(
+    "ChihHanShen/bimanual-so101-pickvials-real",          # HF 目標名 (連字號)
+    root="datasets/bimanual_so101_vial_pickplace_real",   # 本機資料夾 (底線)
+)
+ds.push_to_hub(private=False, tags=["so101","bimanual","real","lerobot"])
+'
+```
 
-lerobot-rollout \
- --strategy.type=base \
- --policy.path=/home/max/Desktop/lerobot/outputs/train/2026-06-04/16-23-37_diffusion/checkpoints/last/pretrained_model \
- --policy.device=cuda \
- --robot.type=bi_so_follower \
- --robot.id=bimanual_so101_follower \
- --robot.calibration_dir=/home/max/Desktop/lerobot/calibration/bimanual_follower \
- --robot.left_arm_config.port=/dev/lerobot_follower_left \
- --robot.left_arm_config.use_degrees=true \
- --robot.left_arm_config.cameras='{ego_centric: {type: intelrealsense, serial_number_or_name: "138422072598", width: 640, height: 480, fps: 30}}' \
- --robot.right_arm_config.port=/dev/lerobot_follower_right \
- --robot.right_arm_config.use_degrees=true \
- --robot.right_arm_config.cameras='{third_person: {type: intelrealsense, serial_number_or_name: "215322078630", width: 640, height: 480, fps: 30}}' \
- --task="Pick up the cube and place it in the box." \
- --duration=60
+> `push_to_hub()` 是「覆蓋 + 新增」，**不會刪掉 Hub 上本機已無的檔**。只加集時完全正確。
+> 自動上傳 meta/ data/ videos/ (跳過 images/)、建 repo、產 dataset card、打版本 tag。
+> 資料已由 lerobot-record 收尾過，無需再 finalize()。訓練時要用 HF 上的**連字號**名稱。
 
-# Optional: record evaluation episodes while the policy runs (auto-upload off):
+### 6b. 刪過集之後重新上傳 (鏡像，清掉孤兒檔) ⚠️
 
-# swap --strategy.type=base for:
+刪集會重新打包 shard、檔案數可能變少 → 單純重推會在 Hub 留下沒人引用的孤兒 mp4。
+用 `delete_patterns` 讓 Hub 精確鏡像本機 (README 卡片不動)：
 
-# --strategy.type=sentry \
+```bash
+cd /home/graphen/sim2real/lerobot
+uv run python -c '
+from lerobot.datasets.lerobot_dataset import LeRobotDataset
+from huggingface_hub import HfApi
+ds = LeRobotDataset(
+    "ChihHanShen/bimanual-so101-pickvials-real",
+    root="datasets/bimanual_so101_vial_pickplace_real",
+)
+HfApi().upload_folder(
+    repo_id=ds.repo_id, repo_type="dataset", folder_path=str(ds.root),
+    ignore_patterns=["images/"],
+    delete_patterns=["data/*", "videos/*", "meta/*"],   # 刪掉本機已無的舊 shard
+)
+'
+```
 
-# --dataset.repo_id=ChihHanShen/bimanual_so101_pickplace_eval \
-
-# --dataset.root=/home/max/Desktop/lerobot/datasets/bimanual_so101_pickplace_eval \
-
-# --dataset.single_task="Pick up the cube and place it in the box."
+> 替代法：直接在 HF 網頁刪掉整個 repo，再跑 6a 從頭推一份 (最乾淨，代價是失去 likes/歷史)。
