@@ -131,16 +131,25 @@ class SOFollower(Robot):
         input(f"Move {self} to the middle of its range of motion and press ENTER....")
         homing_offsets = self.bus.set_half_turn_homings()
 
-        # Attempt to call record_ranges_of_motion with a reduced motor set when appropriate.
+        # By default `wrist_roll` is a full-turn joint: skip it in the sweep and hard-code its full
+        # encoder range. Set `calibrate_wrist_roll_range=True` to sweep it like every other joint.
         full_turn_motor = "wrist_roll"
-        unknown_range_motors = [motor for motor in self.bus.motors if motor != full_turn_motor]
-        print(
-            f"Move all joints except '{full_turn_motor}' sequentially through their "
-            "entire ranges of motion.\nRecording positions. Press ENTER to stop..."
-        )
-        range_mins, range_maxes = self.bus.record_ranges_of_motion(unknown_range_motors)
-        range_mins[full_turn_motor] = 0
-        range_maxes[full_turn_motor] = 4095
+        if self.config.calibrate_wrist_roll_range:
+            unknown_range_motors = list(self.bus.motors)
+            print(
+                "Move all joints (including 'wrist_roll') sequentially through their "
+                "entire ranges of motion.\nRecording positions. Press ENTER to stop..."
+            )
+            range_mins, range_maxes = self.bus.record_ranges_of_motion(unknown_range_motors)
+        else:
+            unknown_range_motors = [motor for motor in self.bus.motors if motor != full_turn_motor]
+            print(
+                f"Move all joints except '{full_turn_motor}' sequentially through their "
+                "entire ranges of motion.\nRecording positions. Press ENTER to stop..."
+            )
+            range_mins, range_maxes = self.bus.record_ranges_of_motion(unknown_range_motors)
+            range_mins[full_turn_motor] = 0
+            range_maxes[full_turn_motor] = 4095
 
         self.calibration = {}
         for motor, m in self.bus.motors.items():

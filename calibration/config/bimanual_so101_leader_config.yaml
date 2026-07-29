@@ -12,9 +12,11 @@ teleop:
   id: bimanual_so101_leader # filename prefix for the per-arm calibration files
   calibration_dir: /home/graphen/sim2real/lerobot/calibration/bimanual_leader
 
-  # Only `port` is used for leader arms; BiSOLeader ignores any other per-arm fields.
+  # BiSOLeader only forwards `port` and `calibrate_wrist_roll_range` per arm; other fields are ignored.
   left_arm_config:
     port: /dev/ttyLeaderLeft
+    calibrate_wrist_roll_range: true # sweep wrist_roll too (default false = treat it as full-turn 0..4095)
 
   right_arm_config:
     port: /dev/ttyLeaderRight
+    calibrate_wrist_roll_range: true

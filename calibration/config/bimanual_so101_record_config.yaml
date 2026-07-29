@@ -60,7 +60,7 @@ dataset:
   root: /home/graphen/sim2real/lerobot/datasets/bimanual_so101_vial_pickplace_real
   single_task: "Pick up the vials and place them into the rack"
   fps: 30 # 30 # MUST match the camera fps above (record errors if mismatched)
-  num_episodes: 20
+  num_episodes: 50
 
   episode_time_s: 90 # seconds to record per episodes
   reset_time_s: 60 # seconds to reset the scene between episodes

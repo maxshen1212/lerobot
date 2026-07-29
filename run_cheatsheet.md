@@ -65,9 +65,16 @@ uv run lerobot-dataset-viz \
 uv run lerobot-edit-dataset \
   --repo_id ChihHanShen/bimanual_so101_vial_pickplace_real \
   --root datasets/bimanual_so101_vial_pickplace_real \
-  --new_root datasets/bimanual_so101_vial_pickplace_real \
+  --new_root datasets/bimanual_so101_vial_pickplace_real_clean \
   --operation.type delete_episodes \
-  --operation.episode_indices "[4, 21, 59]"
+  --operation.episode_indices "[24, 43]"
+
+uv run lerobot-edit-dataset \
+  --repo_id ChihHanShen/bimanual-so101-pickvials-real-15fps \
+  --root datasets/bimanual-so101-pickvials-real-15fps \
+  --new_root datasets/bimanual-so101-pickvials-real-15fps_clean \
+  --operation.type delete_episodes \
+  --operation.episode_indices "[45, 46, 47, 48]"
 
 # 刪完必驗
 uv run python tools/check_frame_alignment.py datasets/bimanual_so101_vial_pickplace_real
@@ -91,7 +98,20 @@ lerobot-replay \
   --robot.right_arm_config.port=/dev/ttyFollowerRight --robot.right_arm_config.use_degrees=true \
   --dataset.repo_id=ChihHanShen/bimanual_so101_vial_pickplace_real \
   --dataset.root=/home/graphen/sim2real/lerobot/datasets/bimanual_so101_vial_pickplace_real \
-  --dataset.episode=0 --dataset.fps=30
+  --dataset.episode=0 \
+  --dataset.fps=30
+
+lerobot-replay \
+  --robot.type=bi_so_follower --robot.id=bimanual_so101_follower \
+  --robot.calibration_dir=/home/graphen/sim2real/lerobot/calibration/bimanual_follower \
+  --robot.left_arm_config.port=/dev/ttyFollowerLeft  --robot.left_arm_config.use_degrees=true \
+  --robot.right_arm_config.port=/dev/ttyFollowerRight --robot.right_arm_config.use_degrees=true \
+  --dataset.repo_id=ChihHanShen/bimanual-so101-pickvials-real-15fps \
+  --dataset.root=/home/graphen/sim2real/lerobot/datasets/bimanual-so101-pickvials-real-15fps_clean \
+  --dataset.episode=44 \
+  --dataset.fps=15
+
+
 ```
 
 ## 6. 上傳到 Hugging Face (公開)
@@ -136,8 +156,8 @@ uv run python -c '
 from lerobot.datasets.lerobot_dataset import LeRobotDataset
 from huggingface_hub import HfApi
 ds = LeRobotDataset(
-    "ChihHanShen/bimanual-so101-pickvials-real",
-    root="datasets/bimanual_so101_vial_pickplace_real",
+    "ChihHanShen/bimanual-so101-pickvials-real-15fps",
+    root="/home/graphen/sim2real/lerobot/datasets/bimanual-so101-pickvials-real-15fps",
 )
 HfApi().upload_folder(
     repo_id=ds.repo_id, repo_type="dataset", folder_path=str(ds.root),

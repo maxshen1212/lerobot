@@ -41,6 +41,13 @@ class SOFollowerConfig:
     # Set to `True` for backward compatibility with previous policies/dataset
     use_degrees: bool = True
 
+    # By default `wrist_roll` is treated as a full-turn joint during calibration: its range is
+    # hard-coded to the full encoder span (0..4095) and it is skipped in the range-of-motion sweep.
+    # Set to `True` to instead sweep `wrist_roll` like every other joint and record its real min/max.
+    # NOTE: with `use_degrees=True` (DEGREES norm mode) the recorded range only shifts the zero-point
+    # midpoint and does not clip motion, so this mostly matters when `use_degrees=False`.
+    calibrate_wrist_roll_range: bool = False
+
 
 @RobotConfig.register_subclass("so101_follower")
 @RobotConfig.register_subclass("so100_follower")

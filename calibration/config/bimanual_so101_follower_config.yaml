@@ -17,9 +17,11 @@ robot:
     use_degrees: true # keep true for SO-101 policy compatibility
     disable_torque_on_disconnect: true
     max_relative_target: null # set a positive float (e.g. 5.0) to cap motor movement for safety
+    calibrate_wrist_roll_range: true # sweep wrist_roll too (default false = treat it as full-turn 0..4095)
 
   right_arm_config:
     port: /dev/ttyFollowerRight
     use_degrees: true
     disable_torque_on_disconnect: true
     max_relative_target: null
+    calibrate_wrist_roll_range: true
