@@ -6,13 +6,30 @@
 ## 0. 一次性設定 (setup)
 
 ```bash
-lerobot-find-port                     # 找 leader/follower 序列埠
-graphen-setup-udev                    # 建立 /dev/tty{Leader,Follower}{Left,Right} 穩定 symlink
+graphen-setup-udev --apply            # 依 repo 內的序號表建立 /dev/tty{Leader,Follower}{Left,Right}
+                                      # (只有換 USB 轉板才需要 --identify 重新辨識序號)
 lerobot-find-cameras realsense        # 列出 RealSense 序號 (貼進 record/teleop config)
 
 lerobot-calibrate --config_path=calibration/config/bimanual_so101_follower_config.yaml
 lerobot-calibrate --config_path=calibration/config/bimanual_so101_leader_config.yaml
+
+# 校準完立刻 commit，這個 commit 就是這批 dataset 的基準
+git add calibration/ && git commit -m "calib: baseline for <dataset name>"
 ```
+
+> **Calibration 一致性是這個專案的硬性前提** — 收資料與 eval 必須是同一組 calibration，
+> 否則 policy 看到的正規化分布會不一樣。完整流程（每次開工的檢查、維修後怎麼判斷有沒有
+> 跑掉、跑掉了怎麼救）見 **[CALIBRATION.md](CALIBRATION.md)**。
+> 沒事**不要**重跑 `lerobot-calibrate`。
+
+## 0.5 每次開工前的檢查
+
+```bash
+graphen-setup-udev              # USB symlink 是否都在且序號正確
+git status calibration/         # 應該是乾淨的；有 M 就代表被重新校準過 → git checkout calibration/
+```
+
+維修過手臂之後，要另外掃硬限位跟基準比對，見 [CALIBRATION.md](CALIBRATION.md) §4。
 
 ## 1. Teleop (無錄製，純遙操作測試)
 
