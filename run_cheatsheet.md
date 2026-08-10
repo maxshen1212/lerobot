@@ -18,7 +18,7 @@ lerobot-find-cameras realsense  # 列出 RealSense 序號，貼進 record config
 lerobot-calibrate --config_path=calibration/config/bimanual_so101_follower_config.yaml
 lerobot-calibrate --config_path=calibration/config/bimanual_so101_leader_config.yaml
 
-git add calibration/ && git commit -m "calib: baseline for <dataset name>"
+git add calibration/ && git commit -m "calib: baseline for the firest experiment on 08/10"
 ```
 
 > **收資料與 eval 必須是同一組 calibration**，否則 policy 看到的正規化分布不一樣。
@@ -72,20 +72,23 @@ lerobot-dataset-viz \
 
 ## 4. 刪除品質不好的 episode
 
+**用 workshop 的 wrapper**，它認得本專案的扁平 `datasets/<name>` 結構，而且是用穩定的**檔號**刪：
+
 ```bash
-lerobot-edit-dataset \
-  --repo_id ChihHanShen/bimanual-so101-pickvials-real \
-  --root datasets/bimanual-so101-pickvials-real \
-  --new_root datasets/bimanual-so101-pickvials-real-clean \
-  --operation.type delete_episodes \
-  --operation.episode_indices "[24, 43]"
+cd ~/sim2real/Sim-to-Real-SO-101-Workshop
+# 先改 tools/delete_episodes.py 最上面兩行 REPO / ROOT 指向真機資料集
+python tools/list_episodes.py           # 列出檔號 → episode_index 對照
+python tools/delete_episodes.py 47 30   # 刪 file-047、file-030
 ```
 
-> 1. **一定要給 `--root`**（= 資料集資料夾本身，不再拼 repo_id）。不給會去找 HF 快取而找不到。
->    `--root` == `--new_root` = 原地改並自動留 `_bak`。
-> 2. **每刪一次就 reindex** → 要刪的一次全列進去，勿分批。
+> ⚠️ **不要用 `lerobot-edit-dataset`。** 在 0.4.3 上它對本專案的 layout 是壞的：
+> `--new_root` **這個旗標不存在**（那是 0.6.1 才加的，0.4.3 只有 `--new_repo_id`），
+> 而且 `get_output_path()` 把輸出算成 `root / <repo_id>`
+> ——載入時 `root` 當成資料集本身、輸出時又拿它去拼 repo_id，兩邊慣例不一致，
+> 結果會寫進 `datasets/<name>/ChihHanShen/<name>/` 這種巢狀位置，不會替換到你的資料集。
 >
-> workshop 的 `tools/delete_episodes.py` 是用穩定「檔號」刪、ROOT 寫死指向 sim 資料集，**勿混用**。
+> **檔號 vs episode_index**:檔號刪掉後永遠空著、不會重用;`episode_index` 每刪一次就重排。
+> 用檔號才不會刪錯。編號不連續是正常的,不影響訓練或上傳。
 
 ## 5. Replay（在真機重播某一集，驗證校正/接線）
 
