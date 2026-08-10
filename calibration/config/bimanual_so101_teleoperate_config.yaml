@@ -16,7 +16,7 @@
 #     record config for the live camera block.
 
 robot:
-  type: bi_so100_follower
+  type: bi_so101_follower
   id: bimanual_so101_follower
   calibration_dir: /home/graphen/sim2real/lerobot/calibration/bimanual_follower
 
@@ -32,7 +32,7 @@ robot:
   #     { type: intelrealsense, serial_number_or_name: "138422072598", width: 640, height: 480, fps: 30 }
 
 teleop:
-  type: bi_so100_leader
+  type: bi_so101_leader
   id: bimanual_so101_leader
   calibration_dir: /home/graphen/sim2real/lerobot/calibration/bimanual_leader
 

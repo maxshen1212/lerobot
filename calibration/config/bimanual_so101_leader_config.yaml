@@ -15,7 +15,7 @@
 #       * wrist_roll is swept by default (see the follower config for details)
 
 teleop:
-  type: bi_so100_leader
+  type: bi_so101_leader
   id: bimanual_so101_leader # filename prefix for the per-arm calibration files
   calibration_dir: /home/graphen/sim2real/lerobot/calibration/bimanual_leader
 

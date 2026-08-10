@@ -16,7 +16,7 @@
 #     so every joint including wrist_roll gets a real measured range.
 
 robot:
-  type: bi_so100_follower
+  type: bi_so101_follower
   id: bimanual_so101_follower # filename prefix for the per-arm calibration files
   calibration_dir: /home/graphen/sim2real/lerobot/calibration/bimanual_follower
 

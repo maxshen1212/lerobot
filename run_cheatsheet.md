@@ -3,6 +3,12 @@
 本專案的實機命令記錄。目前 real 資料集：
 `ChihHanShen/bimanual-so101-pickvials-real` @ `/home/graphen/sim2real/lerobot/datasets/bimanual-so101-pickvials-real`
 
+> **環境：`source ~/env_isaaclab/bin/activate`。**
+> 這個 checkout（branch `n1.7-graphen`，v0.4.3）與 sim 端共用同一個 venv，
+> **本目錄下沒有自己的 `.venv`**。所以下面的指令一律直接呼叫，
+> **不要加 `uv run`** —— 在這裡跑 `uv run` 會就地生出一個新的 `.venv`，
+> 那正是這次遷移要消掉的東西。
+
 ## 0. 一次性設定 (setup)
 
 ```bash
@@ -21,6 +27,13 @@ git add calibration/ && git commit -m "calib: baseline for <dataset name>"
 > 否則 policy 看到的正規化分布會不一樣。完整流程（每次開工的檢查、維修後怎麼判斷有沒有
 > 跑掉、跑掉了怎麼救）見 **[CALIBRATION.md](CALIBRATION.md)**。
 > 沒事**不要**重跑 `lerobot-calibrate`。
+>
+> 這個版本用 **RANGE_M100_100（±100）**，`use_degrees` 一律不設。
+> 在 ±100 下 span 直接就是尺度，**每個關節都必須掃到真正的硬限位**。
+>
+> 四個 YAML 的型別是 **`bi_so101_follower` / `bi_so101_leader`**（本 repo 自己加的，
+> 見 CALIBRATION.md §1.2）。**不要改回 `bi_so100_*`** —— 那條路徑會把 `wrist_roll`
+> 寫死成 0–4095。
 
 ## 0.5 每次開工前的檢查
 
@@ -51,50 +64,50 @@ lerobot-record --config_path=calibration/config/bimanual_so101_record_config.yam
 | ← 左方向鍵 | 丟棄並重錄上一集     | —                        |
 | Esc        | 完全停止並存檔       | 完全停止並存檔           |
 
-> 編碼參數 (streaming / encoder*threads=2 / queue=90 / av1) 已在 record config 內調校，
-> 與 sim 資料集 codec 對齊。相機 key = `wrist_left` / `center` / `wrist_right` (無 left*/right\_ 前綴)。
+> **編碼在 0.4.x 是另一套模型。** 0.6.x 的 streaming 編碼選項
+> (`streaming_encoding` / `encoder_queue_maxsize` / `encoder_threads`) **不存在**；
+> 0.4.x 是先用 writer thread 寫 PNG，再在 `save_episode()` 內編碼。
+> 對應參數是 `num_image_writer_processes` / `num_image_writer_threads_per_camera`
+> / `video_encoding_batch_size`，已在 record config 內設成 `0 / 4 / 1`。
+> **第一次錄要留意 fps 穩不穩**，不穩就把 `num_image_writer_processes` 調到 1 以上。
+>
+> 相機 key = `wrist_left` / `center` / `wrist_right` (無 left*/right\_ 前綴) —— 0.4.x 原生就是這樣，
+> 不需要 0.6.x 那個 workaround。
 
 ## 3. 檢查資料品質 (QA)
 
 ```bash
-# (a) 影片幀數 vs action/state 幀數是否對齊 (抓 streaming 掉幀)
-uv run python tools/check_frame_alignment.py datasets/bimanual-so101-pickvials-real
-
-# (b) 列出每個 episode 對應的 mp4 檔號與時間段 (一個 mp4 內含多集!)
-uv run python tools/view_episode.py datasets/bimanual-so101-pickvials-real --list
-
-# (c) 抽出單一 episode、三台相機一起切片並開啟 (例: ep 47)
-uv run python tools/view_episode.py datasets/bimanual-so101-pickvials-real 47
-#   單一相機、不自動開: --cam center --no-open
-
-# (d) 完整視覺化: 影片 + 12 維 state/action 曲線同步播放 (Rerun 視窗)
-uv run lerobot-dataset-viz \
+# 影片 + 12 維 state/action 曲線同步播放 (Rerun 視窗)
+lerobot-dataset-viz \
   --repo-id ChihHanShen/bimanual-so101-pickvials-real \
   --root datasets/bimanual-so101-pickvials-real --episode-index 47
 ```
 
 > ⚠️ mp4 檔名是「檔號 file-XXX」，**不是 episode_index**，且一個 mp4 串了多集。
-> 想看某一集一定要用 `view_episode.py` 或 `dataset-viz` 查表，不能直接點 mp4 猜。
+> 想看某一集要用 `dataset-viz` 查表，不能直接點 mp4 猜。
+>
+> **`tools/check_frame_alignment.py` 與 `tools/view_episode.py` 沒有遷過來**
+> （從 0.6.1 遷過來時判定不需要），這個 checkout 沒有 `tools/`。
 
 ## 4. 刪除品質不好的 episode
 
 ```bash
-uv run lerobot-edit-dataset \
+lerobot-edit-dataset \
   --repo_id ChihHanShen/bimanual-so101-pickvials-real \
   --root datasets/bimanual-so101-pickvials-real \
   --new_root datasets/bimanual-so101-pickvials-real-clean \
   --operation.type delete_episodes \
   --operation.episode_indices "[24, 43]"
 
-uv run lerobot-edit-dataset \
+lerobot-edit-dataset \
   --repo_id ChihHanShen/bimanual-so101-pickvials-real-15fps \
   --root datasets/bimanual-so101-pickvials-real-15fps \
   --new_root datasets/bimanual-so101-pickvials-real-15fps-clean \
   --operation.type delete_episodes \
   --operation.episode_indices "[45, 46, 47, 48]"
 
-# 刪完必驗
-uv run python tools/check_frame_alignment.py datasets/bimanual-so101-pickvials-real
+
+# (刪完的驗證: 用 lerobot-info / lerobot-dataset-viz 抽查, tools/ 沒有遷過來)
 ```
 
 > **兩個坑：**
@@ -109,27 +122,23 @@ uv run python tools/check_frame_alignment.py datasets/bimanual-so101-pickvials-r
 
 ```bash
 lerobot-replay \
-  --robot.type=bi_so_follower --robot.id=bimanual_so101_follower \
+  --robot.type=bi_so101_follower --robot.id=bimanual_so101_follower \
   --robot.calibration_dir=/home/graphen/sim2real/lerobot/calibration/bimanual_follower \
-  --robot.left_arm_config.port=/dev/ttyFollowerLeft  --robot.left_arm_config.use_degrees=true \
-  --robot.right_arm_config.port=/dev/ttyFollowerRight --robot.right_arm_config.use_degrees=true \
+  --robot.left_arm_port=/dev/ttyFollowerLeft \
+  --robot.right_arm_port=/dev/ttyFollowerRight \
   --dataset.repo_id=ChihHanShen/bimanual-so101-pickvials-real \
-  --dataset.root=/home/graphen/sim2real/lerobot/datasets/bimanual-so101-pickvials-real\
+  --dataset.root=/home/graphen/sim2real/lerobot/datasets/bimanual-so101-pickvials-real \
   --dataset.episode=0 \
   --dataset.fps=30
-
-lerobot-replay \
-  --robot.type=bi_so_follower --robot.id=bimanual_so101_follower \
-  --robot.calibration_dir=/home/graphen/sim2real/lerobot/calibration/bimanual_follower \
-  --robot.left_arm_config.port=/dev/ttyFollowerLeft  --robot.left_arm_config.use_degrees=true \
-  --robot.right_arm_config.port=/dev/ttyFollowerRight --robot.right_arm_config.use_degrees=true \
-  --dataset.repo_id=ChihHanShen/bimanual-so101-pickvials-real-15fps \
-  --dataset.root=/home/graphen/sim2real/lerobot/datasets/bimanual-so101-pickvials-real-15fps \
-  --dataset.episode=44 \
-  --dataset.fps=15
-
-
 ```
+
+> **0.4.x 的欄位變化**(v0.6.1 → v0.4.3,branch `n1.7-graphen`):
+> `bi_so_follower` → **`bi_so101_follower`**(本 repo 新增,見 [CALIBRATION.md](CALIBRATION.md) §1.2);
+> `--robot.left_arm_config.port` → **`--robot.left_arm_port`**(扁平);
+> **`use_degrees` 不用給**(預設 `False` = ±100,見 [CALIBRATION.md](CALIBRATION.md) §0)。
+> `--dataset.*` 四個欄位(`repo_id` / `episode` / `root` / `fps`)在 0.4.3 完全相同。
+>
+> **`--dataset.fps` 要對上該資料集自己的 fps**(看 `meta/info.json`),不是照抄 30。
 
 ## 6. Hugging Face 下載 / 上傳
 
@@ -139,7 +148,7 @@ lerobot-replay \
 
 ```bash
 # 一次性登入 (下載 private repo / 上傳都需要，寫入需 write token: https://huggingface.co/settings/tokens)
-uv run hf auth login
+hf auth login
 ```
 
 ### 6a. 下載資料集 (download)
@@ -149,11 +158,11 @@ cd /home/graphen/sim2real/lerobot
 
 # --repo-type dataset 必填 (預設是 model)；--local-dir 直接落地成平舖資料夾，
 # 符合本專案 datasets/<name> 的慣例 (不要用預設 HF cache，list_episodes.py / delete_episodes.py 認的是這個路徑)
-uv run hf download ChihHanShen/bimanual-so101-pickvials-real-V2 \
+hf download ChihHanShen/bimanual-so101-pickvials-real-V2 \
   --repo-type dataset \
   --local-dir datasets/bimanual-so101-pickvials-real-V2
 
-uv run hf download ChihHanShen/bimanual-so101-pickvials-real-15fps \
+hf download ChihHanShen/bimanual-so101-pickvials-real-15fps \
   --repo-type dataset \
   --local-dir datasets/bimanual-so101-pickvials-real-15fps
 ```
@@ -164,7 +173,7 @@ uv run hf download ChihHanShen/bimanual-so101-pickvials-real-15fps \
 
 ```bash
 cd /home/graphen/sim2real/lerobot
-uv run python -c '
+python -c '
 from lerobot.datasets.lerobot_dataset import LeRobotDataset
 ds = LeRobotDataset(
     "ChihHanShen/bimanual-so101-pickvials-real",          # HF 目標名 (連字號)
@@ -185,7 +194,7 @@ ds.push_to_hub(private=False, tags=["so101","bimanual","real","lerobot"])
 
 ```bash
 cd /home/graphen/sim2real/lerobot
-uv run python -c '
+python -c '
 from lerobot.datasets.lerobot_dataset import LeRobotDataset
 from huggingface_hub import HfApi
 ds = LeRobotDataset(

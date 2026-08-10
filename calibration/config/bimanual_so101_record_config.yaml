@@ -19,7 +19,7 @@
 #     instead. See the `--- video encoding ---` block below.
 
 robot:
-  type: bi_so100_follower
+  type: bi_so101_follower
   id: bimanual_so101_follower
   calibration_dir: /home/graphen/sim2real/lerobot/calibration/bimanual_follower
 
@@ -53,7 +53,7 @@ robot:
       }
 
 teleop:
-  type: bi_so100_leader
+  type: bi_so101_leader
   id: bimanual_so101_leader
   calibration_dir: /home/graphen/sim2real/lerobot/calibration/bimanual_leader
 
