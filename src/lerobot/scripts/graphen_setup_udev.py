@@ -6,7 +6,7 @@
 綁到固定名稱。綁序號（不是 USB 路徑）代表插在哪個實體孔都不影響。
 注意序號屬於控制板，不屬於手臂 —— 換控制板要重跑 --identify。
 
-序號存在 calibration/config/arm_serials.json，跟著 repo 走，所以套用規則不需要任何互動：
+序號存在 Sim-to-Real-SO-101-Workshop/calibration/config/arm_serials.json，跟著 repo 走，所以套用規則不需要任何互動：
 
     graphen-setup-udev              # 檢查目前連線（預設，不會改動任何東西）
     graphen-setup-udev --apply      # 依序號寫入 udev 規則（需要 sudo）
@@ -51,12 +51,24 @@ def connected_serials() -> dict[str, str]:
     return found
 
 
+def workshop_serials() -> Path:
+    """序號表的正式位置。
+
+    2026-08-11 起 calibration/ 整個搬到 workshop repo（那裡才是這套雙臂機構的專案）。
+    src/lerobot/scripts/graphen_setup_udev.py -> lerobot repo 根目錄 -> 隔壁的 workshop。
+    """
+    return Path(__file__).resolve().parents[3].parent / "Sim-to-Real-SO-101-Workshop" / SERIALS_RELPATH
+
+
 def serials_candidates() -> list[Path]:
-    """序號表的搜尋順序：環境變數 → repo 根目錄 → 目前工作目錄。"""
+    """序號表的搜尋順序：環境變數 → workshop repo → 本 repo 根目錄 → 目前工作目錄。
+
+    保留 lerobot 端的候選只是為了舊 checkout 還能跑，新的一律寫到 workshop。
+    """
     candidates = []
     if env := os.environ.get("GRAPHEN_ARM_SERIALS"):
         candidates.append(Path(env).expanduser())
-    # src/lerobot/scripts/graphen_setup_udev.py -> repo 根目錄
+    candidates.append(workshop_serials())
     candidates.append(Path(__file__).resolve().parents[3] / SERIALS_RELPATH)
     candidates.append(Path.cwd() / SERIALS_RELPATH)
     return candidates
@@ -69,7 +81,7 @@ def serials_path() -> Path:
     print("[錯誤] 找不到序號表，已嘗試：")
     for path in serials_candidates():
         print(f"  {path}")
-    print("請從 lerobot/ 目錄執行，或設定 GRAPHEN_ARM_SERIALS，或執行 `graphen-setup-udev --identify`。")
+    print("請從 Sim-to-Real-SO-101-Workshop/ 目錄執行，或設定 GRAPHEN_ARM_SERIALS，或執行 `graphen-setup-udev --identify`。")
     sys.exit(1)
 
 
@@ -84,7 +96,8 @@ def load_serials() -> dict[str, str]:
 
 
 def save_serials(serials: dict[str, str]) -> None:
-    path = next((p for p in serials_candidates() if p.exists()), serials_candidates()[-2])
+    # 都不存在時（全新 checkout 跑 --identify）寫到正式位置，不要落在 cwd 或舊的 lerobot 端。
+    path = next((p for p in serials_candidates() if p.exists()), workshop_serials())
     path.parent.mkdir(parents=True, exist_ok=True)
     data = {
         "_comment": (
@@ -215,9 +228,10 @@ def apply() -> int:
 
     rc = check()
     print()
+    # 0.4.x 的每臂欄位是扁平的（left_arm_port），不是 0.6.x 的 left_arm_config.port。
     print("這些名稱和 calibration/config/*.yaml 的 port 一致，例如：")
-    print("  --robot.left_arm_config.port=/dev/ttyFollowerLeft")
-    print("  --teleop.left_arm_config.port=/dev/ttyLeaderLeft")
+    print("  --robot.left_arm_port=/dev/ttyFollowerLeft")
+    print("  --teleop.left_arm_port=/dev/ttyLeaderLeft")
     return rc
 
 
