@@ -61,9 +61,9 @@ teleop:
   right_arm_port: /dev/ttyLeaderRight
 
 dataset:
-  repo_id: ChihHanShen/bimanual_so101_vial_pickplace_real # change to {your_hf_username}/{dataset_name}
-  root: /home/graphen/sim2real/lerobot/datasets/bimanual_so101_vial_pickplace_real
-  single_task: "Pick up the vials and place them into the rack"
+  repo_id: ChihHanShen/bimanual-so101-pickvials-real # change to {your_hf_username}/{dataset_name}
+  root: /home/graphen/sim2real/Sim-to-Real-SO-101-Workshop/datasets/bimanual-so101-pickvials-real
+  single_task: "Pick up the vial and place it in the rack"
   fps: 30 # MUST match the camera fps above (record errors if mismatched)
   num_episodes: 50
 
@@ -86,4 +86,18 @@ dataset:
 # Display options (top-level RecordConfig fields)
 display_data: false # stream cameras + state to Rerun
 play_sounds: true # vocal cues for episode start/stop
-resume: true # append episodes to an existing dataset
+
+# resume=true  -> LeRobotDataset(...)        載入既有資料集並 append
+# resume=false -> LeRobotDataset.create(...) 建立新資料集
+#
+# 這裡留 true,因為那是常態(每次接續收資料)。但 `root` 底下還沒有資料集時,
+# true 會失敗:load 找不到本地 meta/info.json -> 回退去 Hub 抓 -> 空的 HF repo
+# 沒有 codebase version tag -> RevisionNotFoundError。訊息完全看不出真正原因。
+#
+# 所以「這批資料集的第一次錄製」要在命令列覆寫一次:
+#     lerobot-record --config_path=... --resume=false
+# 之後就用不帶旗標的原指令。
+#
+# 不用怕誤用:create() 是 mkdir(exist_ok=False),資料夾已存在會直接
+# FileExistsError,不會覆蓋既有資料。
+resume: true # append episodes to an existing dataset(第一次錄請加 --resume=false)
